@@ -125,6 +125,7 @@ class CCXTBroker:
             "secret": api_secret or os.getenv("CCXT_API_SECRET", ""),
             "enableRateLimit": True,
             "options": {"defaultType": "spot"},
+            "adjustForTimeDifference": True,
         }
         if proxies:
             exchange_config["requests_kwargs"] = {"proxies": proxies}
@@ -134,7 +135,13 @@ class CCXTBroker:
             self.exchange.set_sandbox_mode(True)
 
     def fetch_balances(self):
-        return self.exchange.fetch_balance()
+        # Retry-strategi on -1021, try once again if client time i ahead
+        try:
+            balances = self.exchange.fetch_balance()
+        except ccxt.InvalidNonce:
+            self.exchange.load_time_difference()
+            balances = self.exchange.fetch_balance()
+        return balances
 
     def fetch_price(self, symbol: str) -> float:
         t = self.exchange.fetch_ticker(symbol)
@@ -391,7 +398,7 @@ def run_agent(
         "dry_run": dry_run,
     }
 
-    print(f"\n=== Log Entry ({row['time']}) ===\n"
+    print(f"\n=== Trade Summary ({row['time']}) ===\n"
         f"  Symbols:        {row['symbols']}\n"
         f"  Signals:        {row['signals']}\n"
         f"  Prices:         {row['prices']}\n"

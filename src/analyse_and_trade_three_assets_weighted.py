@@ -68,25 +68,21 @@ def main(dry_run: bool = True):
     except Exception:
         raise
 
-    # move old CSVs to history
-    rotate_history()
+    if download_history:
+        # move old CSVs to history
+        rotate_history()
 
-    # download OHLCV using programmatic wrappers
-    try:
-        import download_binance_ohlcv as dl
-        # the module should provide a run(symbol, data_folder) or similar; try common names
-        for sym, folder in (("BNBUSDT", DATA_FOLDERS["bnb"]), ("ETHUSDT", DATA_FOLDERS["ethereum"]), ("SOLUSDT", DATA_FOLDERS["solana"])):
-            ensure_dir(folder)
-            dl.run(symbol=sym, data_folder=str(folder))
-    except Exception:
-        raise
-
-    # download portfolio
-    try:
-        import download_portfolio as download_portfolio
-        download_portfolio.run("portfolio.json", "USDC")
-    except Exception:
-        raise
+        # download OHLCV using programmatic wrappers
+        try:
+            import download_binance_ohlcv as dl
+            # the module should provide a run(symbol, data_folder) or similar; try common names
+            for sym, folder in (("BNBUSDT", DATA_FOLDERS["bnb"]), ("ETHUSDT", DATA_FOLDERS["ethereum"]), ("SOLUSDT", DATA_FOLDERS["solana"])):
+                ensure_dir(folder)
+                dl.run(symbol=sym, data_folder=str(folder))
+        except Exception:
+            raise
+    else:
+        print("DOWNLOAD_HISTORY är satt. Skip download history")
 
     # locate CSVs and call the agent directly
     csvA, csvB, csvC = locate_input_files()
@@ -98,12 +94,16 @@ def main(dry_run: bool = True):
         exchange="binance",
         dry_run=dry_run,
     )
-    log.info("Agent finished. Snapshot keys: %s", ", ".join(snapshot.keys()))
+    log.info("Agent finished")
 
 def is_trade_run() -> bool:
     return os.getenv("TRADE_DRY_RUN") in ("1", "true", "True", "YES", "yes")
 
+def is_download_history() -> bool:
+    return os.getenv("DOWNLOAD_HISTORY") in ("1", "true", "True", "YES", "yes")
+
 if __name__ == "__main__":
     dry_run=is_trade_run()
+    download_history=is_download_history()
     main(dry_run)
 

@@ -61,7 +61,12 @@ def run(out_file: str, quote: str):
 
     # Hämta balans
     print("🔄 Hämtar portfölj...")
-    balance = exchange.fetch_balance()
+    # Retry-strategi on -1021, try once again if client time i ahead
+    try:
+        balance = exchange.fetch_balance()
+    except ccxt.InvalidNonce:
+        exchange.load_time_difference()
+        balance = exchange.fetch_balance()
 
     # Extrahera användbara delar
     portfolio = {
