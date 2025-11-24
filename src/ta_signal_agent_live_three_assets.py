@@ -254,7 +254,14 @@ def run_agent(
         dfs[sym] = df
         signals[sym.split("/")[0]] = sig
         meta[sym] = {"score": score, "reasons": reasons, "ts": ts, "last_close": last_close}
-        print(f"{sym} - {meta[sym]}") # TODO format output
+        print(
+            f"\n=== {sym} ===\n"
+            f"  Score:       {score}\n"
+            f"  Last close:  {last_close}\n"
+            f"  Timestamp:   {ts}\n"
+            f"  Reasons:\n"
+            + "\n".join(f"    • {r}" for r in reasons)
+)
     
     # Broker / portfolio: require_env guards that API keys exist in environment
     require_env()
@@ -331,8 +338,13 @@ def run_agent(
             px = prices[sym_pair]
             qty = (abs(usd_delta) / max(px, 1e-12)) * fee_mult
             qty = min(qty, get_free_base(base))
-            if qty * px >= min_trade and qty > 0:
-                planned_orders.append(("SELL", sym_pair, qty))
+            sell_price = qty*px
+            if qty > 0:
+                if sell_price >= min_trade:
+                    print(f"SELL {sym_pair} qty:{qty}, price:{sell_price}")                    
+                    planned_orders.append(("SELL", sym_pair, qty))
+                else:
+                    print(f"too small quantity SELL {sym_pair} qty:{qty}, price:{sell_price}")
 
     # execute planned orders (dry_run controls whether to place actual orders)
     executions = []
@@ -363,7 +375,7 @@ def run_agent(
         "current_alloc_pct": current_alloc,
     }
 
-    # write outputs as the CLI did
+    # write outputs
     Path(log).write_text("") if False else None  # noop to avoid lint errors; keep original write logic below
     # write CSV log row + portfolio json
     now = datetime.now(ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M:%S")
@@ -378,55 +390,17 @@ def run_agent(
         "reason": rb.reason,
         "dry_run": dry_run,
     }
-    #log_file = Path(log)
-    #exists = log_file.exists()
-    #with log_file.open("a", newline="", encoding="utf-8") as f:
-    #    writer = csv.DictWriter(f, fieldnames=row.keys())
-    #    if not exists:
-    #        writer.writeheader()
-    #    writer.writerow(row)
-    print(f"{row}")
+
+    print(f"\n=== Log Entry ({row['time']}) ===\n"
+        f"  Symbols:        {row['symbols']}\n"
+        f"  Signals:        {row['signals']}\n"
+        f"  Prices:         {row['prices']}\n"
+        f"  Current alloc:  {row['current_alloc']}\n"
+        f"  Targets:        {row['targets']}\n"
+        f"  Trades:         {row['trades_pp']}\n"
+        f"  Reason:         {row['reason']}\n"
+        f"  Dry run:        {row['dry_run']}\n"
+    )
 
     Path(portfolio).write_text(json.dumps(portfolio_snapshot, indent=2, ensure_ascii=False))
     return portfolio_snapshot
-
-
-# --- Change the existing main() at the end of the file to call run_agent(...) so CLI continues to work:
-# Replace the current main() body (argparse + logic) with a thin wrapper:
-def main():
-    ap = argparse.ArgumentParser(description="Tre-tillgångars TA-agent med CCXT och rebalansering")
-    ap.add_argument("--csvA", required=True, help="CSV med OHLCV för symbol A")
-    ap.add_argument("--csvB", required=True, help="CSV med OHLCV för symbol B")
-    ap.add_argument("--csvC", required=True, help="CSV med OHLCV för symbol C")
-    ap.add_argument("--symbols", required=True, help="Komma-separerade tre symbolpar, t.ex. BTC/USDT,ETH/USDT,SOL/USDT")
-    ap.add_argument("--exchange", default="binance")
-    ap.add_argument("--api-key", default=None)
-    ap.add_argument("--api-secret", default=None)
-    ap.add_argument("--sandbox", action="store_true")
-    ap.add_argument("--fee-bps", type=float, default=10.0, help="avgifter i bps")
-    ap.add_argument("--min-trade", type=float, default=20.0, help="minsta order i USD (quote). Default 20 USDC per nya regler")
-    ap.add_argument("--dry-run", action="store_true", help="Simulera utan riktiga ordrar (hämtar ändå verklig portfolio och priser)")
-    ap.add_argument("--log", default="trades_log.csv")
-    ap.add_argument("--portfolio", default="portfolio.json", help="Filen att spara täckt portfölj-snapshot till")
-    args = ap.parse_args()
-
-    snapshot = run_agent(
-        csvA=args.csvA,
-        csvB=args.csvB,
-        csvC=args.csvC,
-        symbols=args.symbols,
-        exchange=args.exchange,
-        api_key=args.api_key,
-        api_secret=args.api_secret,
-        sandbox=args.sandbox,
-        fee_bps=args.fee_bps,
-        min_trade=args.min_trade,
-        dry_run=args.dry_run,
-        log=args.log,
-        portfolio=args.portfolio,
-    )
-    # main prints/writes as run_agent already wrote files
-    if args.dry_run:
-        print("Dry-run: used real balances/prices but did not place live orders.")
-    else:
-        print("Production: orders placed where planned.")
