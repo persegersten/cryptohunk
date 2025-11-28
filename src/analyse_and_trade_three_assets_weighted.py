@@ -63,7 +63,7 @@ def main(dry_run: bool = True):
     # Optional: call schedule gate programmatically if schedule_gate exposes a run() function
     try:
         import schedule_gate as schedule_gate
-        if not schedule_gate.run(grace_minutes=5, at_hours=[0,4,7,8,16,20,21], time_zone="Europe/Stockholm"):
+        if not schedule_gate.run(grace_minutes=5, at_hours=[0,4,8,12,16,20], time_zone="Europe/Stockholm"):
             return
     except Exception:
         raise
