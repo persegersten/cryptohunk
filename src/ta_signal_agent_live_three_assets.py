@@ -348,10 +348,10 @@ def run_agent(
             sell_price = qty*px
             if qty > 0:
                 if sell_price >= min_trade:
-                    print(f"SELL {sym_pair} qty:{qty}, price:{sell_price}")                    
+                    print(f"SELL {sym_pair} qty:{qty}, price:{px}, sell_price:{sell_price}")                    
                     planned_orders.append(("SELL", sym_pair, qty))
                 else:
-                    print(f"too small quantity SELL {sym_pair} qty:{qty}, price:{sell_price}")
+                    print(f"ABORTED SELL {sym_pair} qty:{qty}, price:{sell_price}")
 
     # execute planned orders (dry_run controls whether to place actual orders)
     executions = []

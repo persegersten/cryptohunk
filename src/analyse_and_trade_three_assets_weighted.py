@@ -59,7 +59,7 @@ def locate_input_files() -> Tuple[str, str, str]:
         raise RuntimeError(f"Missing files in: {missing}")
     return str(file_bnb), str(file_eth), str(file_sol)
 
-def main(dry_run: bool = True):
+def main(dry_run: bool = True, skip_download_history: bool = False):
     # Optional: call schedule gate programmatically if schedule_gate exposes a run() function
     try:
         import schedule_gate as schedule_gate
@@ -68,7 +68,7 @@ def main(dry_run: bool = True):
     except Exception:
         raise
 
-    if download_history:
+    if not skip_download_history:
         # move old CSVs to history
         rotate_history()
 
@@ -100,10 +100,10 @@ def is_trade_run() -> bool:
     return os.getenv("TRADE_DRY_RUN") in ("1", "true", "True", "YES", "yes")
 
 def is_download_history() -> bool:
-    return os.getenv("DOWNLOAD_HISTORY") in ("1", "true", "True", "YES", "yes")
+    return os.getenv("SKIP_DOWNLOAD_HISTORY") in ("1", "true", "True", "YES", "yes")
 
 if __name__ == "__main__":
     dry_run=is_trade_run()
-    download_history=is_download_history()
-    main(dry_run)
+    skip_download=is_download_history()
+    main(dry_run, skip_download)
 
