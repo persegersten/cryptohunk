@@ -21,8 +21,6 @@ Kräver: portfolio_rebalancer.py i samma katalog.
 import os
 import sys
 import json
-import csv
-import argparse
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -351,7 +349,7 @@ def run_agent(
                     print(f"SELL {sym_pair} qty:{qty}, price:{px}, sell_price:{sell_price}")                    
                     planned_orders.append(("SELL", sym_pair, qty))
                 else:
-                    print(f"ABORTED SELL {sym_pair} qty:{qty}, price:{sell_price}")
+                    print(f"IGNORED SELL {sym_pair} qty:{qty}, price:{px}, price:{sell_price}")
 
     # execute planned orders (dry_run controls whether to place actual orders)
     executions = []
