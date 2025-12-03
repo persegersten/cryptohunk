@@ -102,7 +102,7 @@ def decide_signal(df, close_col="close"):
     else:
         score -= 1; reasons.append("Pris < EMA200 (bearish lång trend)")
 
-    if score >= 2:
+    if score >= 1:
         return "BUY", score, reasons
     elif score <= -2:
         return "SELL", score, reasons
