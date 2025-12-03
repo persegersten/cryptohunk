@@ -104,7 +104,7 @@ def decide_signal(df, close_col="close"):
 
     if score >= 1:
         return "BUY", score, reasons
-    elif score <= -2:
+    elif score <= -1:
         return "SELL", score, reasons
     return "HOLD", score, reasons
 
