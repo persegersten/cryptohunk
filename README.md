@@ -1,117 +1,183 @@
-# CryptoHunk
+<p align="right">
+  <img src="images/hunk.png" alt="The Hunk" width="150" style="float:right; margin: 0 0 10px 10px;">
+</p>
 
-Lightweight scripts and tools to analyse and (optionally) trade a small multi-asset crypto portfolio using downloaded OHLCV data and a TA-based signal agent.
+# Cryptohunk — crypto data & portfolio tools
 
-This README describes what the repository does, how to run it (dry-run vs live), and what the included shell scripts do. There are two primary runner scripts:
+A compact collection of Python tools for fetching OHLCV data, analysing a small multi-asset portfolio and running a simple technical-analysis (TA) agent and rebalancer.
 
-- `analyse_and_trade_three_assets_weighted.sh`
-- `dryrun_analyse_and_trade.sh`
+This README is pragmatic and focused: how to start the whole application locally for development/debugging (via local.sh) and how the cloud container should run it (via run.sh), plus the minimal hints you need to deploy.
 
-## Overview / How it works
+---
 
-High level steps performed by the runner scripts:
+## Short summary / intent
 
-1. Optionally gate execution to scheduled times using `src/schedule_gate.py`.
-2. Download the portfolio (`src/download_portfolio.py`).
-3. Move previous downloaded data into `./history/`.
-4. Download fresh OHLCV files for each asset with `src/download_binance_ohlcv.py`.
-5. Locate the newest CSV files in each asset folder (e.g. `bnb_data`, `ethereum_data`, `solana_data`).
-6. Run the TA signal agent `src/ta_signal_agent_live_three_assets.py` using the three CSVs and configured symbols.
-   - The dry-run script passes `--dry-run` so no live trades are executed.
+- Start the full pipeline locally from your laptop using local.sh (for development, debugging, dry-runs).
+- In cloud environments the container / orchestration is responsible for providing all environment variables; run.sh is the runtime entrypoint used by the cloud container.
+- The codebase contains scripts for downloading market data (Binance / CoinGecko), downloading portfolio/trade-history, running the TA agent and rebalancer. The recommended developer workflow is to run the whole pipeline via local.sh which orchestrates the same steps run.sh runs in production.
 
-The "three asset" flow used in the scripts is: BNB, ETH, SOL (symbols used when invoking the agent are `BNB/USDC,ETH/USDC,SOL/USDC`).
+---
 
-## Quickstart
+## Repo layout (high level)
 
-Prerequisites
-- Python 3.8+
+- `.python-version` — recommended Python version
+- `requirements.txt` — Python dependencies
+- `Procfile` — process declaration for Heroku-like PaaS (optional)
+- `run.sh` — cloud entrypoint (expects env vars provided by container)
+- `binance_debug.sh`, `noop.sh`, `run.sh` — helper scripts
+- `src/` — main Python scripts:
+  - download_binance_ohlcv.py, download_coingecko_ohlcv.py
+  - download_portfolio.py, download_trade_history.py
+  - ta_signal_agent_live_three_assets.py (main agent)
+  - analyse_and_trade_three_assets_weighted.py
+  - portfolio_rebalancer.py
+  - schedule_gate.py, heroku_ip_proxy.py
+  - test_* scripts for connectivity/health checks
+
+---
+
+## Quick prerequisites
+
+- Git
+- Python (match `.python-version`; pyenv recommended)
 - pip
-- Binance API key & secret configured for any trading scripts that actually place orders.
+- Virtualenv (or venv)
+- API keys for exchanges (Binance / CCXT) if you intend to hit private endpoints
+- (Optional) Docker for containerized runs
 
-Setup
-1. Clone the repository:
-   git clone https://github.com/persegersten/cryptohunk.git
-   cd cryptohunk
+---
 
-2. Create and activate a virtual environment, install dependencies (if a requirements file exists):
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt 
+## Environment variables
 
-3. Ensure the following folders exist (scripts expect them):
-   - ./bnb_data
-   - ./ethereum_data
-   - ./solana_data
-   - ./history
+The cloud container must provide the secrets and config through environment variables. Typical variables used across scripts:
 
-4. Set environment variables for any exchange APIs you will use. For Binance examples:
-   export BINANCE_API_KEY="your_key"
-   export BINANCE_SECRET="your_secret"
+- BINANCE_API_KEY
+- BINANCE_API_SECRET (or BINANCE_SECRET depending on script)
+- CCXT_API_KEY (alternate key name found in some helpers)
+- CCXT_API_SECRET
+- FIXIE_SOCKS_HOST (optional proxy)
+- PROXY_URL (optional)
+- Any other environment variables your deployment or monitoring expects (LOG_LEVEL, DATA_DIR, etc.)
 
-   For local convenience (e.g., on a laptop) you can place API keys in an untracked secrets.file at the repo root, but do not commit it — environment variables or a secrets manager are still recommended.
+Important: Do not commit keys into git. Use your cloud provider’s secret manager or container orchestration secret features.
 
-   secrets.json:
-   {
-    "CCXT_API_KEY": "your_key",
-    "CCXT_API_SECRET": "your_secret"
-  }
+---
 
-Usage — dry run (recommended for testing)
-- Make executable (if not already):
-  chmod +x dryrun_analyse_and_trade.sh
+## Local development workflow (use local.sh)
 
-- Run:
-  ./dryrun_analyse_and_trade.sh
+local.sh is the recommended developer entrypoint: it sets local-friendly environment variables (or loads them from a local .env file), enables dry-run mode and then calls the same pipeline invoked by run.sh so your local run closely mirrors production.
 
-This runs the full data download and analysis pipeline but passes `--dry-run` to the TA agent so it will not place live trades.
+Suggested local.sh (example you can create at repo root):
 
-Usage — live (weighted three-asset run)
-- Make executable:
-  chmod +x analyse_and_trade_three_assets_weighted.sh
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-- Run:
-  ./analyse_and_trade_three_assets_weighted.sh
+# Example local.sh — adjust to your environment.
+# Load .env if present (optional, do NOT commit .env)
+if [ -f .env ]; then
+  # Use a simple .env loader; keep secrets out of git
+  export $(grep -v '^#' .env | xargs)
+fi
 
-This runs the same pipeline but without `--dry-run`. Use only if you have configured the trading credentials and are ready to place orders.
+# Set developer-friendly defaults (override in .env or env)
+export LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+# Set dry-run so no live orders are sent
+export CRYPTOHUNK_DRYRUN="1"
 
-Notes about scheduling
-- The live script uses `src/schedule_gate.py` with a list of execution times (configured in the script).
-- For local testing you may comment out the schedule gate or adjust the times / timezone in the script.
+# Optionally set minimal example API keys for read-only endpoints
+# export BINANCE_API_KEY="..."
+# export BINANCE_API_SECRET="..."
 
-Key scripts and what they do
-- `src/schedule_gate.py` — gate that prevents the script from running unless it is an allowed time window.
-- `src/download_portfolio.py` — download or refresh portfolio metadata (generates `portfolio.json`).
-- `src/download_binance_ohlcv.py` — download OHLCV CSVs from Binance for a given symbol into a specified folder.
-- `src/ta_signal_agent_live_three_assets.py` — the TA signal agent that ingests three CSVs and decides trades for the configured symbols.
+# Ensure expected folders exist for downloaded CSVs
+mkdir -p bnb_data ethereum_data solana_data history
 
-Directory / file expectations
-- `bnb_data/`, `ethereum_data/`, `solana_data/` — folders where fresh downloads are stored.
-- `history/` — older CSVs are moved here by the runner scripts.
-- `portfolio.json` — generated/updated by `src/download_portfolio.py`.
+# Run the same pipeline as run.sh but in local/dry-run mode
+# If run.sh supports flags you can forward them here (e.g., --dry-run)
+./run.sh
+```
 
-Important behavior details
-- The runner scripts look for the first file in each data folder (via `find ... | head -n 1`) and set `IN_DATA_BNB`, `IN_DATA_ETHEREUM`, `IN_DATA_SOLANA` environment variables to those file paths befo[...]
-- The dry-run script is identical except it adds `--dry-run` to the TA agent invocation, preventing live trades.
+How to use local.sh:
+- Make executable: chmod +x local.sh
+- Create a local .env with your dev env vars (untracked), or export variables in shell
+- ./local.sh
 
-Configuration hints
-- To change assets or symbols, update the `--symbols` argument passed to `src/ta_signal_agent_live_three_assets.py` in the shell scripts.
-- To add or remove assets, add/remove corresponding data download commands and folder handling code in the runner scripts.
-- If you want to run this from cron instead of `schedule_gate.py`, comment out the gate lines and create a cron job to run the desired script at your chosen times.
+local.sh should be used for iterative testing, debugging and validating your connectivity / data pipeline before deploying to cloud.
 
-Troubleshooting
-- "Ingen fil hittades i ./bnb_data" — the download step failed or produced no files. Check logs/output of `src/download_binance_ohlcv.py`.
-- Permission issues running scripts — ensure files are executable (chmod +x).
-- Missing API credentials — ensure environment variables for APIs are present if the download or trading code needs them.
+---
 
-Security and safety
-- Always use `dryrun_analyse_and_trade.sh` to validate the pipeline before enabling live trading.
-- Keep API keys and secrets out of the repo. Use environment variables or a secrets manager.
-- For local convenience (e.g., running on a laptop) you may use an untracked secrets.file at the repository root, but do not commit it — environment variables or a secrets manager are still recommended.
-- Test on small sizes or a paper account before increasing risk.
+## Production / Cloud usage (run.sh)
 
-Contributing
-- Please open issues or pull requests if you want to add new supported assets, improve signal logic, or enhance safety checks.
-- When adding assets, update the runner scripts to download the new asset OHLCV files, move files to history, and pass the new CSVs to the TA agent.
+- In the cloud, containers must provide all required environment variables (secrets, proxy, config).
+- The container or init system should call run.sh (it is the intended entrypoint for the cloud environment).
+- run.sh can rely on environment variables being injected by the orchestrator; it should not hardcode secrets.
 
-License
-- No license file is included in the repo by default; add a LICENSE file if you intend to make this open source.
+Typical container flow:
+- Container image includes code and dependencies
+- Secrets are injected by the platform (Kubernetes Secrets, ECS Parameter Store/Secrets Manager, Heroku config vars)
+- The container command (or entrypoint) runs: ./run.sh
+
+Example Docker CMD (conceptual):
+
+```dockerfile
+CMD ["./run.sh"]
+```
+
+If you want the container to execute the pipeline periodically, run a process manager or create a CronJob / Kubernetes CronJob. Alternatively, run the container as a continuously running worker.
+
+---
+
+## Basic local quickstart
+
+1. Clone
+   - git clone https://github.com/persegersten/cryptohunk.git
+   - cd cryptohunk
+
+2. Prepare Python
+   - pyenv install $(cat .python-version)  # optional
+   - python -m venv .venv
+   - source .venv/bin/activate
+   - pip install -r requirements.txt
+
+3. Create .env (optional, untracked) with keys for local work:
+   - BINANCE_API_KEY=...
+   - BINANCE_API_SECRET=...
+   - LOG_LEVEL=DEBUG
+
+4. Make local.sh executable and run it:
+   - chmod +x local.sh
+   - ./local.sh
+
+5. For cloud runs, ensure run.sh is executable and call it from your container (env vars injected by the platform):
+   - chmod +x run.sh
+   - ./run.sh  (the container should already have the env set)
+
+---
+
+## Tests and safety checks
+
+- Use the test scripts before live trading:
+  - python src/test_binance_spot_key.py
+  - python src/test_binance_health_check.py
+- Keep a dry-run mode for the agent (set CRYPTOHUNK_DRYRUN=1 or use any flags provided by the agent) and validate behaviour thoroughly.
+- Consider using a testnet account and limited balances before enabling live trading.
+
+---
+
+## Deployment hints (practical)
+
+- Heroku: use Procfile, set config vars, scale a worker to run the agent. Use Heroku Scheduler for periodic tasks. Ensure secrets are set via `heroku config:set`.
+- Docker: build an image, keep run.sh as CMD/entrypoint; inject secrets using the platform or `docker run -e` (avoid using docker-compose for production secrets).
+- Kubernetes: build an image, run as Deployment or CronJob; store secrets in Secrets and mount as env vars; use liveness/readiness probes.
+- Cloud VMs: use systemd or cron to run run.sh; store secrets in cloud secret manager or environment injection.
+
+---
+
+## Logging / monitoring
+
+- Make sure stdout/stderr are captured by your platform logging driver.
+- Send logs to a central system (CloudWatch, Stackdriver, Papertrail) for production runs.
+- Add alerts around error rate, failed downloads and trade execution.
+
+## References
+The image - August Wilhelm Johnson, known as "The Lion from Scandinavia" https://sv.wikipedia.org/wiki/August_Wilhelm_Johnson
