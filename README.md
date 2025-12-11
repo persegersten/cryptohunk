@@ -1,12 +1,18 @@
-<p align="right">
-  <img src="images/hunk.png" alt="The Hunk" width="150" style="float:right; margin: 0 0 10px 10px;">
-</p>
-
-# Cryptohunk — crypto data & portfolio tools
+<table>
+<tr>
+<td># Cryptohunk — crypto data & portfolio tools
 
 A compact collection of Python tools for fetching OHLCV data, analysing a small multi-asset portfolio and running a simple technical-analysis (TA) agent and rebalancer.
 
 This README is pragmatic and focused: how to start the whole application locally for development/debugging (via local.sh) and how the cloud container should run it (via run.sh), plus the minimal hints you need to deploy.
+</td>
+<td style="vertical-align: top;">
+
+<img src="images/hunk.png" width="250"/>
+
+</td>
+</tr>
+</table>
 
 ---
 
