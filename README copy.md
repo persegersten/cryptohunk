@@ -57,26 +57,58 @@ This README is pragmatic and focused: how to start the whole application locally
 
 The cloud container must provide the secrets and config through environment variables. Typical variables used across scripts:
 
-- CCXT_API_KEY your binance key
-- CCXT_API_SECRET your binance secret
-- FIXIE_SOCKS_HOST your proxy (optional)
-- SCHEDULE_FORCE_RUN set to true if you always want to run TA and possible rebalance your portfolio. A true value will bypass the scheduler.
-- SKIP_DOWNLOAD_HISTORY=set to true if you want to skip downloading spot trade history. Should always be set to false unless you want run locally several times.
-- TRADE_DRY_RUN Set to true if you want to skip the actual trade.
- 
+- BINANCE_API_KEY
+- BINANCE_API_SECRET (or BINANCE_SECRET depending on script)
+- CCXT_API_KEY (alternate key name found in some helpers)
+- CCXT_API_SECRET
+- FIXIE_SOCKS_HOST (optional proxy)
+- PROXY_URL (optional)
+- Any other environment variables your deployment or monitoring expects (LOG_LEVEL, DATA_DIR, etc.)
+
 Important: Do not commit keys into git. Use your cloud provider’s secret manager or container orchestration secret features.
 
 ---
 
 ## Local development workflow (use local.sh)
 
-This is the recommended developer entrypoint. To install the local.sh you first need to copy local.sh.template to local.sh and set the environment variables. Important! do not commit api keys/secrets to the repo. local.sh is added to .gitignore to prevent this. 
+local.sh is the recommended developer entrypoint: it sets local-friendly environment variables (or loads them from a local .env file), enables dry-run mode and then calls the same pipeline invoked by run.sh so your local run closely mirrors production.
 
+Suggested local.sh (example you can create at repo root):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Example local.sh — adjust to your environment.
+# Load .env if present (optional, do NOT commit .env)
+if [ -f .env ]; then
+  # Use a simple .env loader; keep secrets out of git
+  export $(grep -v '^#' .env | xargs)
+fi
+
+# Set developer-friendly defaults (override in .env or env)
+export LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+# Set dry-run so no live orders are sent
+export CRYPTOHUNK_DRYRUN="1"
+
+# Optionally set minimal example API keys for read-only endpoints
+# export BINANCE_API_KEY="..."
+# export BINANCE_API_SECRET="..."
+
+# Ensure expected folders exist for downloaded CSVs
+mkdir -p bnb_data ethereum_data solana_data history
+
+# Run the same pipeline as run.sh but in local/dry-run mode
+# If run.sh supports flags you can forward them here (e.g., --dry-run)
+./run.sh
+```
 
 How to use local.sh:
-- Copy template file: cp local.sh.template local.sh
 - Make executable: chmod +x local.sh
-- Run script: ./local.sh
+- Create a local .env with your dev env vars (untracked), or export variables in shell
+- ./local.sh
+
+local.sh should be used for iterative testing, debugging and validating your connectivity / data pipeline before deploying to cloud.
 
 ---
 
@@ -113,10 +145,16 @@ If you want the container to execute the pipeline periodically, run a process ma
    - source .venv/bin/activate
    - pip install -r requirements.txt
 
-3. Install local.sh locally with keys for local work:
-   - See instructions above
+3. Create .env (optional, untracked) with keys for local work:
+   - BINANCE_API_KEY=...
+   - BINANCE_API_SECRET=...
+   - LOG_LEVEL=DEBUG
 
-4. For cloud runs, ensure run.sh is executable and call it from your container (env vars injected by the platform):
+4. Make local.sh executable and run it:
+   - chmod +x local.sh
+   - ./local.sh
+
+5. For cloud runs, ensure run.sh is executable and call it from your container (env vars injected by the platform):
    - chmod +x run.sh
    - ./run.sh  (the container should already have the env set)
 

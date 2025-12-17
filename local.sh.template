@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+export SCHEDULE_FORCE_RUN=true
+export TRADE_DRY_RUN=true
+export SKIP_DOWNLOAD_HISTORY=false
+export FIXIE_SOCKS_HOST=<your proxy> 
+export CCXT_API_KEY= <your key>,
+export CCXT_API_SECRET= <your secret>
+
+python src/analyse_and_trade_three_assets_weighted.py
