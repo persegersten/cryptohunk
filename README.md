@@ -1,151 +1,123 @@
-## Cryptohunk — crypto data & portfolio tools
-<table>
-<tr>
-<td>
-A compact collection of Python tools for fetching OHLCV data, analysing a small multi-asset portfolio and running a simple technical-analysis (TA) agent and rebalancer.
+# Cryptohunk — crypto data & portfolio tools
 
-This README is pragmatic and focused: how to start the whole application locally for development/debugging (via local.sh) and how the cloud container should run it (via run.sh), plus the minimal hints you need to deploy.
-</td>
-<td style="vertical-align: top;">
+A compact collection of Python tools for fetching OHLCV data, analysing a small multi-asset portfolio, and running a simple technical-analysis (TA) agent + rebalancer. This README is pragmatic and focused: how to run locally for development/debugging (local.sh) and how the container entrypoint should run in the cloud (run.sh).
 
-<img src="images/hunk.png" width="250"/>
-
-</td>
-</tr>
-</table>
+![hunk](images/hunk.png)
 
 ---
 
-## Short summary / intent
+## Quick overview
 
-- Start the full pipeline locally from your laptop using local.sh (for development, debugging, dry-runs).
-- In cloud environments the container / orchestration is responsible for providing all environment variables; run.sh is the runtime entrypoint used by the cloud container.
-- The codebase contains scripts for downloading market data (Binance / CoinGecko), downloading portfolio/trade-history, running the TA agent and rebalancer. The recommended developer workflow is to run the whole pipeline via local.sh which orchestrates the same steps run.sh runs in production.
+- Run the full pipeline locally for development and dry-runs with `local.sh`.
+- In cloud environments, `run.sh` is the container entrypoint and expects required configuration via environment variables.
+- The repo includes scripts to download market data (Binance / CoinGecko), portfolio and trade history, run the TA agent, and rebalance a portfolio.
 
 ---
 
-## Repo layout (high level)
+## Repo layout
 
 - `.python-version` — recommended Python version
 - `requirements.txt` — Python dependencies
-- `Procfile` — process declaration for Heroku-like PaaS (optional)
-- `run.sh` — cloud entrypoint (expects env vars provided by container)
-- `binance_debug.sh`, `noop.sh`, `run.sh` — helper scripts
-- `src/` — main Python scripts:
-  - download_binance_ohlcv.py, download_coingecko_ohlcv.py
-  - download_portfolio.py, download_trade_history.py
-  - ta_signal_agent_live_three_assets.py (main agent)
-  - analyse_and_trade_three_assets_weighted.py
-  - portfolio_rebalancer.py
-  - schedule_gate.py, heroku_ip_proxy.py
-  - test_* scripts for connectivity/health checks
+- `Procfile` — optional (Heroku-like PaaS)
+- `run.sh`, `binance_debug.sh`, `noop.sh` — helper and entrypoint scripts
+- `src/` — main Python scripts, e.g.:
+  - data: `download_binance_ohlcv.py`, `download_coingecko_ohlcv.py`
+  - portfolio: `download_portfolio.py`, `download_trade_history.py`
+  - agent/rebalance: `ta_signal_agent_live_three_assets.py`, `analyse_and_trade_three_assets_weighted.py`, `portfolio_rebalancer.py`
+  - utilities: `schedule_gate.py`, `heroku_ip_proxy.py`
+  - tests: `test_*` scripts for connectivity and health checks
 
 ---
 
-## Quick prerequisites
+## Requirements
 
 - Git
 - Python (match `.python-version`; pyenv recommended)
 - pip
-- Virtualenv (or venv)
-- API keys for exchanges (Binance / CCXT) if you intend to hit private endpoints
-- (Optional) Docker for containerized runs
+- venv or virtualenv
+- Exchange API keys (Binance / CCXT) for private endpoints
+- (Optional) Docker for containerised runs
+
+Do not commit secrets. Use your platform's secret manager or orchestration secrets.
 
 ---
 
-## Environment variables
+## Environment variables (container must provide)
 
-The cloud container must provide the secrets and config through environment variables. Typical variables used across scripts:
+Common variables used across scripts:
 
-- CCXT_API_KEY your binance key
-- CCXT_API_SECRET your binance secret
-- FIXIE_SOCKS_HOST your proxy (optional)
-- SCHEDULE_FORCE_RUN set to true if you always want to run TA and possible rebalance your portfolio. A true value will bypass the scheduler.
-- SKIP_DOWNLOAD_HISTORY=set to true if you want to skip downloading spot trade history. Should always be set to false unless you want run locally several times.
-- TRADE_DRY_RUN Set to true if you want to skip the actual trade.
- 
-Important: Do not commit keys into git. Use your cloud provider’s secret manager or container orchestration secret features.
-
----
-
-## Local development workflow (use local.sh)
-
-This is the recommended developer entrypoint. To install the local.sh you first need to copy local.sh.template to local.sh and set the environment variables. Important! do not commit api keys/secrets to the repo. local.sh is added to .gitignore to prevent this. 
-
-
-How to use local.sh:
-- Copy template file: cp local.sh.template local.sh
-- Make executable: chmod +x local.sh
-- Run script: ./local.sh
+- CCXT_API_KEY — Binance API key
+- CCXT_API_SECRET — Binance API secret
+- FIXIE_SOCKS_HOST — proxy (optional)
+- SCHEDULE_FORCE_RUN — set `true` to bypass scheduler and always run TA + rebalancer
+- SCHEDULE_GRACE_MINUTES - default is 5
+- SCHEDULE_AT_HOURS - default is 0, 4, 8, 12, 16, 20
+- SCHEDULE_TIME_ZONE - default is Europe/Stockholm
+- SKIP_DOWNLOAD_HISTORY — set `true` to skip downloading spot trade history (useful for repeated local runs)
+- TRADE_DRY_RUN — set `true` to avoid executing live trades
 
 ---
 
-## Production / Cloud usage (run.sh)
+## Local development (recommended)
 
-- In the cloud, containers must provide all required environment variables (secrets, proxy, config).
-- The container or init system should call run.sh (it is the intended entrypoint for the cloud environment).
-- run.sh can rely on environment variables being injected by the orchestrator; it should not hardcode secrets.
-
-Typical container flow:
-- Container image includes code and dependencies
-- Secrets are injected by the platform (Kubernetes Secrets, ECS Parameter Store/Secrets Manager, Heroku config vars)
-- The container command (or entrypoint) runs: ./run.sh
-
-Example Docker CMD (conceptual):
-
-```dockerfile
-CMD ["./run.sh"]
-```
-
-If you want the container to execute the pipeline periodically, run a process manager or create a CronJob / Kubernetes CronJob. Alternatively, run the container as a continuously running worker.
-
----
-
-## Basic local quickstart
-
-1. Clone
+1. Clone:
    - git clone https://github.com/persegersten/cryptohunk.git
    - cd cryptohunk
 
-2. Prepare Python
+2. Prepare Python:
    - pyenv install $(cat .python-version)  # optional
    - python -m venv .venv
    - source .venv/bin/activate
    - pip install -r requirements.txt
 
-3. Install local.sh locally with keys for local work:
-   - See instructions above
+3. Install and configure `local.sh`:
+   - cp local.sh.template local.sh
+   - Edit `local.sh` to add environment variables (do not commit)
+   - chmod +x local.sh
+   - ./local.sh
 
-4. For cloud runs, ensure run.sh is executable and call it from your container (env vars injected by the platform):
-   - chmod +x run.sh
-   - ./run.sh  (the container should already have the env set)
+`local.sh` is the recommended developer entrypoint for debugging and dry-runs.
 
 ---
 
-## Tests and safety checks
+## Cloud / Production (run.sh)
 
-- Use the test scripts before live trading:
+- Containers must inject required environment variables (secrets, proxy, config).
+- `run.sh` is the intended entrypoint for cloud runs — do not hardcode secrets.
+- Example Docker command (conceptual):
+  - CMD ["./run.sh"]
+
+For periodic execution use a process manager, CronJob, or Kubernetes CronJob. For continuous execution run the container as a worker.
+
+---
+
+## Quick safety checklist
+
+- Run tests before live trading:
   - python src/test_binance_spot_key.py
   - python src/test_binance_health_check.py
-- Keep a dry-run mode for the agent (set CRYPTOHUNK_DRYRUN=1 or use any flags provided by the agent) and validate behaviour thoroughly.
-- Consider using a testnet account and limited balances before enabling live trading.
+- Use dry-run (`CRYPTOHUNK_DRYRUN=1` or `TRADE_DRY_RUN=true`) and inspect behavior.
+- Prefer testnet accounts / limited balances before enabling live trading.
 
 ---
 
-## Deployment hints (practical)
+## Deployment hints
 
-- Heroku: use Procfile, set config vars, scale a worker to run the agent. Use Heroku Scheduler for periodic tasks. Ensure secrets are set via `heroku config:set`.
-- Docker: build an image, keep run.sh as CMD/entrypoint; inject secrets using the platform or `docker run -e` (avoid using docker-compose for production secrets).
-- Kubernetes: build an image, run as Deployment or CronJob; store secrets in Secrets and mount as env vars; use liveness/readiness probes.
-- Cloud VMs: use systemd or cron to run run.sh; store secrets in cloud secret manager or environment injection.
+- Heroku: use `Procfile`, set config vars, use Heroku Scheduler or run a worker.
+- Docker: inject secrets from the platform; avoid storing secrets in images.
+- Kubernetes: use Secrets, Deployments or CronJobs, and health probes.
+- VMs: use systemd or cron; inject secrets from your cloud provider.
 
 ---
 
-## Logging / monitoring
+## Logging & monitoring
 
-- Make sure stdout/stderr are captured by your platform logging driver.
-- Send logs to a central system (CloudWatch, Stackdriver, Papertrail) for production runs.
-- Add alerts around error rate, failed downloads and trade execution.
+- Ensure stdout/stderr are collected by your platform logging driver.
+- Forward logs to central systems (CloudWatch, Stackdriver, Papertrail).
+- Add alerts for error rates, failed downloads, and trade execution failures.
 
-## References
-The image - August Wilhelm Johnson, known as "The Lion from Scandinavia" https://sv.wikipedia.org/wiki/August_Wilhelm_Johnson
+---
+
+## Reference
+
+Image: August Wilhelm Johnson — "The Lion from Scandinavia" (https://sv.wikipedia.org/wiki/August_Wilhelm_Johnson)
