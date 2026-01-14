@@ -4,7 +4,7 @@ import shutil
 import logging
 from typing import Tuple, List
 import os
-import analyse.download_binance_ohlcv as dl
+import download_binance_ohlcv as dl
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
