@@ -5,7 +5,7 @@
 A compact collection of Python tools for fetching OHLCV data, analysing a small multi-asset portfolio, and running a simple technical-analysis (TA) agent + rebalancer. This README is pragmatic and focused: how to run locally for development/debugging (local.sh) and how the container entrypoint should run in the cloud (run.sh).
 </td>
 <td style="vertical-align: top;">
-<img src="images/hunk.png" width="350"/>
+<img src="images/hunk.png" width="50%"/>
 </td>
 </tr>
 </table>

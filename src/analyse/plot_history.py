@@ -1,26 +1,3 @@
-"""
-# -*- coding: utf-8 -*-
-"""
-"""
-plot_history.py
-
-Läser historikfiler (CSV/Parquet/Pickle/Feather) för en eller flera tidsserier och ritar dem
-över den tidsperiod som angivits (eller hela intervallet om inget anges). Avsett att köras
-som en efterbearbetare efter download_binance_ohlcv.
-
-Huvudfunktion:
-- run(series_inputs, properties): series_inputs kan vara en str (filnamn eller serie-identifierare)
-  eller en lista av sådana. properties är en dict som kan innehålla:
-    - "plot_history" / "plotHistory": bool (om True, generera diagram)
-    - "start": ISO-datum eller str
-    - "end": ISO-datum eller str
-    - "save_path": sökväg för att spara PNG (om satt sparas bilden istället för att bara visa)
-    - "verbose": bool för extra utskrifter
-
-Returnerar en dict med körresultat (t.ex. {"ok": True, "plotted": n}).
-
-CLI-stöd finns för snabb testning.
-"""
 from __future__ import annotations
 from typing import List, Optional, Dict, Any
 from pathlib import Path

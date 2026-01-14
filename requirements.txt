@@ -20,3 +20,6 @@ python-binance
 # För Fixie Socks proxy
 requests[socks]
 PySocks
+
+# For analysing etc
+matplotlib

@@ -1,0 +1,55 @@
+{
+  "generated_at": "20260112T151204Z",
+  "original_download": "downloaded_originals/original_trades_20260112T151204Z.json",
+  "per_asset": {
+    "bnb": {
+      "total_trades": 19,
+      "total_received_amount": 1.37,
+      "total_sent_amount": 1.402,
+      "net_amount": -0.032,
+      "total_commission": {
+        "BNB": 0.00169107,
+        "USDC": 0.33829855
+      },
+      "vwap_per_quote": {
+        "USDC": {
+          "total_asset_volume": 2.772,
+          "vwap_price": 890.769126984127
+        }
+      }
+    },
+    "etherum": {
+      "total_trades": 44,
+      "total_received_amount": 0.3969,
+      "total_sent_amount": 0.4711,
+      "net_amount": -0.0742,
+      "total_commission": {
+        "BNB": 0.00110225,
+        "ETH": 0.00019418,
+        "USDC": 0.63978983
+      },
+      "vwap_per_quote": {
+        "USDC": {
+          "total_asset_volume": 0.868,
+          "vwap_price": 3067.030678571428
+        }
+      }
+    },
+    "solana": {
+      "total_trades": 19,
+      "total_received_amount": 3.745,
+      "total_sent_amount": 3.163,
+      "net_amount": 0.582,
+      "total_commission": {
+        "BNB": 0.00061639,
+        "USDC": 0.14806099
+      },
+      "vwap_per_quote": {
+        "USDC": {
+          "total_asset_volume": 6.908,
+          "vwap_price": 133.873930225825
+        }
+      }
+    }
+  }
+}
