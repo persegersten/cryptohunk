@@ -3,16 +3,6 @@
 export CCXT_API_KEY= <your key>,
 export CCXT_API_SECRET= <your secret>
 
-python src/analyse/analyse.py
-
-# python src/analyse/plot_history.py \
-#  --series ./src/bnb_data/binance_BNBUSDT_1h_30d_20260112_070343.csv \
-#  --series ./src/ethereum_data/binance_ETHUSDT_1h_30d_20260112_070344.csv \
-#  --series ./src/solana_data/binance_SOLUSDT_1h_30d_20260112_070344.csv \
-#  --plot-history \
-#  --start 2025-12-13T07:00:00Z \
-#  --end 2026-01-12T06:00:00Z \
-#  --save output/bnb.png \
-#  --verbose
+python src/analyse/analyse.py --days 30 --save ./output --verbose
 
 

@@ -12,11 +12,10 @@ If some of those modules lack a run_* function, add a small wrapper in each modu
 """
 
 from pathlib import Path
-import shutil
 import logging
 from typing import Tuple, List
 import os
-from ohlcv_files import download_history,locate_input_files
+from analyse.ohlcv_files import download_history,locate_input_files
 
 # Import the agent function directly
 from ta_signal_agent_live_three_assets import run_agent
