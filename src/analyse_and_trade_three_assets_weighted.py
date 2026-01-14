@@ -15,7 +15,7 @@ from pathlib import Path
 import logging
 from typing import Tuple, List
 import os
-from analyse.ohlcv_files import download_history,locate_input_files
+from ohlcv_files import download_history,locate_input_files
 
 # Import the agent function directly
 from ta_signal_agent_live_three_assets import run_agent
