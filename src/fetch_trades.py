@@ -46,12 +46,13 @@ ASSETS = {
     "etherum": "ETH",   # använder ETH för "etherum"
     "solana": "SOL"
 }
+ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIRS = {
-    "bnb": Path("trades/bnb_data"),
-    "etherum": Path("trades/ethereum_data"),
-    "solana": Path("trades/solana_data")
+    "bnb": Path(ROOT / "trades" / "bnb_data"),
+    "etherum": Path(ROOT / "trades" / "ethereum_data"),
+    "solana": Path(ROOT / "trades" / "solana_data")
 }
-ORIGINAL_OUTPUT_DIR = Path("downloaded_originals")
+ORIGINAL_OUTPUT_DIR = Path(ROOT / "trades" / "downloaded_originals")
 REQUEST_LIMIT = 1000  # max trades per request
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

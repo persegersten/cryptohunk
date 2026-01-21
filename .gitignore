@@ -6,6 +6,8 @@ portfolio.json
 secrets.json
 history/
 output/
+trades/
+downloaded_originals/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

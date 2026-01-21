@@ -16,6 +16,7 @@ import pandas as pd
 
 import ohlcv_files as of
 import plot_history as ph
+import fetch_trades as ft
 
 def _now_utc_ts() -> pd.Timestamp:
     return pd.Timestamp(datetime.now(timezone.utc))
@@ -126,3 +127,5 @@ if __name__ == "__main__":
     except Exception as e:
         print("Fel:", e)
         raise
+
+    ft.download_trades()

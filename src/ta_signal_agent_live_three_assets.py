@@ -203,6 +203,56 @@ def get_current_allocations_pct_three(
     alloc["USD"] = vals["USD"] * 100.0 / total
     return alloc
 
+# ---------- Trade history helpers for cost-basis & take-profit ----------
+def _load_trade_history(path: str) -> List[dict]:
+    p = Path(path)
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+def _append_trade_history(path: str, entry: dict) -> None:
+    hist = _load_trade_history(path)
+    hist.append(entry)
+    try:
+        Path(path).write_text(json.dumps(hist, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️ Kunde inte skriva trade history: {e}")
+
+def _compute_cost_from_history(path: str, asset: str, quote: str) -> Tuple[float, float]:
+    """
+    Enkel ackumulerad kostnadsberäkning:
+      - BUY ökar qty och total_cost (quote-amount).
+      - SELL minskar qty och reducerar total_cost proportionellt (approx FIFO via proportionell reducering).
+    Returnerar (remaining_qty, remaining_total_cost_in_quote).
+    """
+    hist = _load_trade_history(path)
+    total_qty = 0.0
+    total_cost = 0.0
+    for e in hist:
+        if e.get("asset") != asset:
+            continue
+        side = e.get("side", "").upper()
+        qty = float(e.get("qty", 0.0))
+        quote_amount = float(e.get("quote_amount", 0.0))
+        if side == "BUY":
+            total_qty += qty
+            total_cost += quote_amount
+        elif side == "SELL":
+            if total_qty <= 0:
+                # inget att minska
+                continue
+            # proportionellt minska kostnadsbasen
+            if qty >= total_qty:
+                total_qty = 0.0
+                total_cost = 0.0
+            else:
+                avg = total_cost / total_qty if total_qty > 0 else 0.0
+                total_cost -= avg * qty
+                total_qty -= qty
+    return total_qty, total_cost
 
 def run_agent(
     csvA: str,
@@ -218,6 +268,8 @@ def run_agent(
     dry_run: bool = True,
     log: str = "trades_log.csv",
     portfolio: str = "portfolio.json",
+    take_profit_pct: float = 0.10,              # Ny: tröskel för att ta hem vinster (10% default)
+    trade_history: str = "trade_history.json", # Ny: där köp/sälj loggas för cost-basis
 ) -> dict:
     """
     Programmatic entrypoint for the TA agent.
@@ -351,22 +403,95 @@ def run_agent(
                 else:
                     print(f"IGNORED SELL {sym_pair} qty:{qty}, price:{px}, price:{sell_price}")
 
+    # --------- Nytt: take-profit (ta hem vinster) ----------
+    # Läs trade-history och planera SELL för tillgångar som har unrealized gain över tröskel
+    for i, base in enumerate(base_ccys):
+        sym_pair = syms_list[i]
+        px = prices[sym_pair]
+        # quantity vi faktiskt har tillgänglig att sälja
+        avail_qty = get_free_base(base)
+        if avail_qty <= 0:
+            continue
+        hist_qty, hist_cost = _compute_cost_from_history(trade_history, base, quote_ccy)
+        if hist_qty <= 0 or hist_cost <= 0:
+            # ingen kostnadsbas hittad i historik — hoppa över
+            continue
+        # använd kostnadsbas från historik (qty_hist kan skilja från avail_qty, men vi säljer max avail_qty)
+        # beräkna kvarvarande cost-per-unit
+        avg_cost = hist_cost / hist_qty if hist_qty > 0 else 0.0
+        unrealized_value = px * hist_qty
+        unrealized_profit = unrealized_value - hist_cost
+        relative = unrealized_profit / hist_cost if hist_cost > 0 else 0.0
+        if relative >= take_profit_pct:
+            # planera SELL för hela tillgängliga qty (men inte mer än hist_qty)
+            qty_to_sell = min(avail_qty, hist_qty)
+            sell_price = qty_to_sell * px
+            # undvik dubbel-sell om rebalance redan la en SELL för samma symbol
+            already_selling = any((side == "SELL" and s == sym_pair) for side, s, _ in planned_orders)
+            if not already_selling and sell_price >= min_trade and qty_to_sell > 0:
+                print(f"TAKE-PROFIT TRIGGERED for {sym_pair}: unrealized +{relative*100:.2f}% -> SELL {qty_to_sell} @ {px}")
+                planned_orders.append(("SELL", sym_pair, qty_to_sell))
+
     # execute planned orders (dry_run controls whether to place actual orders)
     executions = []
     if planned_orders:
         for side, sym_pair, amount in planned_orders:
             if dry_run:
                 if side == "BUY":
+                    # amount = quote_amount for BUY in this codepath
+                    price = prices[sym_pair]
+                    qty = amount / max(price, 1e-12)
                     executions.append({"side": side, "symbol": sym_pair, "amount": amount, "order_id": None})
+                    # log to history even for dry-run (so cost-basis can be tracked in tests)
+                    entry = {
+                        "time": datetime.now(ZoneInfo("UTC")).isoformat(),
+                        "side": "BUY",
+                        "asset": sym_pair.split("/")[0],
+                        "symbol": sym_pair,
+                        "qty": qty,
+                        "quote_amount": amount,
+                        "price": price,
+                        "dry_run": True,
+                    }
+                    _append_trade_history(trade_history, entry)
                 else:
+                    # SELL: amount here is base qty
                     px = prices[sym_pair]
                     executions.append({"side": side, "symbol": sym_pair, "amount": amount, "order_id": None})
+                    entry = {
+                        "time": datetime.now(ZoneInfo("UTC")).isoformat(),
+                        "side": "SELL",
+                        "asset": sym_pair.split("/")[0],
+                        "symbol": sym_pair,
+                        "qty": amount,
+                        "quote_amount": amount * px,
+                        "price": px,
+                        "dry_run": True,
+                    }
+                    _append_trade_history(trade_history, entry)
             else:
                 if side == "BUY":
                     order = broker.market_buy_quote(sym_pair, quote_amount=amount)
+                    # approximate qty/price if order doesn't provide filled fields
+                    price = prices[sym_pair]
+                    qty = amount / max(price, 1e-12)
                 else:
                     order = broker.market_sell_base(sym_pair, base_qty=amount)
+                    price = prices[sym_pair]
+                    qty = amount
                 executions.append({"side": side, "symbol": sym_pair, "amount": amount, "order_id": order.get("id") if isinstance(order, dict) else str(order)})
+                # Append to trade history (approximate using current price)
+                entry = {
+                    "time": datetime.now(ZoneInfo("UTC")).isoformat(),
+                    "side": side,
+                    "asset": sym_pair.split("/")[0],
+                    "symbol": sym_pair,
+                    "qty": qty,
+                    "quote_amount": qty * price,
+                    "price": price,
+                    "dry_run": False,
+                }
+                _append_trade_history(trade_history, entry)
 
     # build portfolio snapshot
     portfolio_snapshot = {

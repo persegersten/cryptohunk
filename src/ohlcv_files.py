@@ -9,7 +9,7 @@ import download_binance_ohlcv as dl
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent / "ohlcv_data"
 HISTORY_DIR = ROOT / "history"
 DATA_FOLDERS = {
     "bnb": ROOT / "bnb_data",
