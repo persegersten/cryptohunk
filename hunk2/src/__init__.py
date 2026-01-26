@@ -1,2 +1,2 @@
 # Package marker for src2
-__all__ = ["config", "assert_env", "main"]
+__all__ = ["assert_env", "clean_data_area", "config", "main"]

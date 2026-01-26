@@ -1,3 +1,4 @@
 # Requirements för vidare utveckling (lägg till fler vid behov)
 requests>=2.28
 python-dotenv>=1.0
+ccxt>=2.8.0

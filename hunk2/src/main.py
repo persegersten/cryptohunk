@@ -2,17 +2,33 @@
 Entrypoint / orchestrator för CryptoHunk2.0
 
 Kör först AssertEnv (steg 1) för att ladda/validera konfiguration.
-Här är platsen där övriga steg (var och en i egen fil) kommer att anropas.
+Här anropas också CleanData (steg 2) och CollectData (steg 3) när flaggor anges.
 """
 import sys
 import argparse
 
-from .assert_env import assert_env_and_report, load_config_from_env
+from .assert_env import assert_env_and_report
+from .clean_data import clean_data_area
+from .collect_data import collect_all as collect_data_all
 
 
 def main():
     parser = argparse.ArgumentParser(description="CryptoHunk2.0 - orchestrator")
-    parser.add_argument("--dump-config", action="store_true", help="Skriv ut parsad konfiguration (ej hemliga värden)")
+    parser.add_argument(
+        "--dump-config",
+        action="store_true",
+        help="Skriv ut parsad konfiguration (ej hemliga värden)",
+    )
+    parser.add_argument(
+        "--clean-data",
+        action="store_true",
+        help="Töm DATA_AREA_ROOT_DIR innan vidare körning",
+    )
+    parser.add_argument(
+        "--collect-data",
+        action="store_true",
+        help="Hämta historik, portfolio och trade-historik",
+    )
     args = parser.parse_args()
 
     try:
@@ -32,17 +48,20 @@ def main():
         print(f" TRADE_THRESHOLD = {cfg.trade_threshold}")
         print(f" DRY_RUN = {cfg.dry_run}")
 
-    # Här kommer anrop till nästa steg när de implementeras, t.ex.:
-    # from .fetch_history import fetch_history_for_all
-    # fetch_history_for_all(cfg)
-    #
-    # from .analyze import analyze_signals
-    # analyze_signals(cfg)
-    #
-    # from .execute_trades import execute_trades
-    # execute_trades(cfg)
+    if args.clean_data:
+        print("Rensar data-arean...")
+        try:
+            clean_data_area(cfg)
+            print("Data-arean är rensad.")
+        except Exception as e:
+            print(f"Fel vid rensning av data-arean: {e}", file=sys.stderr)
+            sys.exit(3)
 
-    print("\nAssertEnv klart. (Vidare steg saknas i denna ursprungliga commit.)")
+    if args.collect_data:
+        print("Startar insamling av data (CollectData)...")
+        collect_data_all(cfg)
+
+    print("\nKlar.")
 
 
 if __name__ == "__main__":
