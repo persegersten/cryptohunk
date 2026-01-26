@@ -16,6 +16,7 @@ import logging
 from typing import Tuple, List
 import os
 from ohlcv_files import download_history,locate_input_files
+import fetch_trades as ft
 
 # Import the agent function directly
 from ta_signal_agent_live_three_assets import run_agent
@@ -37,6 +38,7 @@ def main(dry_run: bool, skip_download_history: bool, sched_grace: int, sched_at_
     if not skip_download_history:
         try:
             download_history()
+            bnb_trade, eth_trade, sol_trade = ft.download_trades()
         except Exception:
             raise
     else:

@@ -1,7 +1,9 @@
 *.csv
 *.swp
+*.json
 local.sh
 analyse.sh
+hunk2/run.sh
 portfolio.json
 secrets.json
 history/
