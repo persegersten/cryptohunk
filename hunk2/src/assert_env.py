@@ -93,6 +93,9 @@ def load_config_from_env() -> Config:
         raise EnvironmentError("TRADE_THRESHOLD måste vara ett tal (float).")
 
     dry_run = _parse_bool(env.get("DRY_RUN", "false"))
+    
+    # Parse QUOTE_ASSETS with default "USDT,USDC"
+    allowed_quote_assets = _parse_currencies(env.get("QUOTE_ASSETS", "USDT,USDC"))
 
     binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
     binance_currency_history_endpoint = env.get(
@@ -119,6 +122,7 @@ def load_config_from_env() -> Config:
         currency_history_period=currency_history_period,
         currency_history_nof_elements=currency_history_nof_elements,
         trade_threshold=trade_threshold,
+        allowed_quote_assets=allowed_quote_assets,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
 
@@ -135,6 +139,7 @@ def assert_env_and_report() -> Config:
     # Minimal rapport (inga hemliga värden skrivs ut)
     print("AssertEnv: miljövariabler validerade.")
     print(f" - currencies: {', '.join(cfg.currencies)}")
+    print(f" - allowed_quote_assets: {', '.join(cfg.allowed_quote_assets)}")
     print(f" - binance_base_url: {cfg.binance_base_url}")
     print(f" - data_area_root_dir: {cfg.data_area_root_dir}")
     print(f" - currency_history_period: {cfg.currency_history_period}")
