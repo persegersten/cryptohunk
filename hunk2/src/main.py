@@ -41,6 +41,7 @@ def main():
         # Endast icke-hemliga värden för översikt
         print("\nKonfigurationsöversikt (säkra värden maskade):")
         print(f" CURRENCIES = {cfg.currencies}")
+        print(f" ALLOWED_QUOTE_ASSETS = {cfg.allowed_quote_assets}")
         print(f" BINANCE_BASE_URL = {cfg.binance_base_url}")
         print(f" DATA_AREA_ROOT_DIR = {cfg.data_area_root_dir}")
         print(f" CURRENCY_HISTORY_PERIOD = {cfg.currency_history_period}")
