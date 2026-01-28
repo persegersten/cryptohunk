@@ -77,6 +77,8 @@ def load_config_from_env() -> Config:
         raise EnvironmentError("CURRENCIES måste innehålla minst en valuta.")
 
     allowed_quote_assets = _parse_currencies(env.get("QUOTE_ASSETS", "USDT,USDC"))
+    if not allowed_quote_assets:
+        raise EnvironmentError("QUOTE_ASSETS måste innehålla minst en quote-tillgång.")
 
     binance_secret = env.get("BINANCE_SECRET", "").strip()
     binance_key = env.get("BINANCE_KEY", "").strip()

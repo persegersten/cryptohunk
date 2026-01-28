@@ -114,6 +114,36 @@ def test_default_quote_assets():
         os.environ.update(original_env)
 
 
+def test_empty_quote_assets():
+    """Test that empty QUOTE_ASSETS raises an error."""
+    # Save original environment
+    original_env = os.environ.copy()
+    
+    try:
+        # Set up minimal environment with empty QUOTE_ASSETS
+        os.environ.clear()
+        os.environ["CURRENCIES"] = "BTC,ETH"
+        os.environ["BINANCE_SECRET"] = "test_secret"
+        os.environ["BINANCE_KEY"] = "test_key"
+        os.environ["BINANCE_TRADING_URL"] = "https://trading.binance.com"
+        os.environ["DATA_AREA_ROOT_DIR"] = "/tmp/test"
+        os.environ["CURRENCY_HISTORY_PERIOD"] = "1h"
+        os.environ["CURRENCY_HISTORY_NOF_ELEMENTS"] = "100"
+        os.environ["TRADE_THRESHOLD"] = "0.01"
+        os.environ["QUOTE_ASSETS"] = ""
+        
+        try:
+            cfg = load_config_from_env()
+            assert False, "Expected EnvironmentError but none was raised"
+        except EnvironmentError as e:
+            assert "QUOTE_ASSETS" in str(e), f"Expected error message about QUOTE_ASSETS, got: {e}"
+            print("✓ Empty QUOTE_ASSETS validation test passed")
+    finally:
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
 if __name__ == "__main__":
     print("Running quote assets configuration tests...\n")
     
@@ -122,6 +152,7 @@ if __name__ == "__main__":
         test_config_dataclass()
         test_load_config_with_quote_assets()
         test_default_quote_assets()
+        test_empty_quote_assets()
         
         print("\n✅ All tests passed!")
     except AssertionError as e:
