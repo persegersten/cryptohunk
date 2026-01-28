@@ -3,6 +3,7 @@ AssertEnv - verifiera att nödvändiga env-variabler finns och bygg Config-objek
 
 Miljövariabler som hanteras:
 - CURRENCIES (kommaseparerad lista, ex "BNB,ETH,SOL")
+- QUOTE_ASSETS (kommaseparerad lista, ex "USDT,USDC", default "USDT,USDC")
 - BINANCE_SECRET
 - BINANCE_KEY
 - BINANCE_BASE_URL (om ej satt används https://api.binance.com)
@@ -96,6 +97,8 @@ def load_config_from_env() -> Config:
     
     # Parse QUOTE_ASSETS with default "USDT,USDC"
     allowed_quote_assets = _parse_currencies(env.get("QUOTE_ASSETS", "USDT,USDC"))
+    if not allowed_quote_assets:
+        raise EnvironmentError("QUOTE_ASSETS måste innehålla minst en quote asset.")
 
     binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
     binance_currency_history_endpoint = env.get(
