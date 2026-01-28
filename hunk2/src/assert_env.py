@@ -15,8 +15,8 @@ Miljövariabler som hanteras:
 - CURRENCY_HISTORY_PERIOD (måste sättas)
 - CURRENCY_HISTORY_NOF_ELEMENTS (måste sättas, int)
 - TRADE_THRESHOLD (måste sättas, float)
+- QUOTE_ASSETS (valfritt, ex "USDT,USDC" — vilka quote-valutor vi vill hämta trades för)
 """
-
 import os
 from typing import List
 from .config import Config
@@ -45,6 +45,8 @@ def load_config_from_env() -> Config:
         "BINANCE_CURRENCY_HISTORY_ENDPOINT": "/api/v3/klines",
         "BINANCE_EXCHANGE_INFO_ENDPOINT": "/api/v3/exchangeInfo",
         "BINANCE_MY_TRADES_ENDPOINT": "/api/v3/myTrades",
+        # default quote assets om QUOTE_ASSETS ej är satt
+        "QUOTE_ASSETS": "USDT,USDC",
     }
 
     missing = []
@@ -105,6 +107,13 @@ def load_config_from_env() -> Config:
         "BINANCE_MY_TRADES_ENDPOINT", defaults["BINANCE_MY_TRADES_ENDPOINT"]
     ).strip()
 
+    # Parse quote assets (kan vara ex "USDT,USDC" — default om env ej satt)
+    quote_assets_raw = env.get("QUOTE_ASSETS", defaults["QUOTE_ASSETS"])
+    allowed_quote_assets = _parse_currencies(quote_assets_raw)
+    if not allowed_quote_assets:
+        # Minimalt skydd: sätt default om parsing misslyckas
+        allowed_quote_assets = _parse_currencies(defaults["QUOTE_ASSETS"])
+
     cfg = Config(
         currencies=currencies,
         binance_secret=binance_secret,
@@ -119,6 +128,7 @@ def load_config_from_env() -> Config:
         currency_history_period=currency_history_period,
         currency_history_nof_elements=currency_history_nof_elements,
         trade_threshold=trade_threshold,
+        allowed_quote_assets=allowed_quote_assets,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
 
@@ -141,5 +151,6 @@ def assert_env_and_report() -> Config:
     print(f" - currency_history_nof_elements: {cfg.currency_history_nof_elements}")
     print(f" - trade_threshold: {cfg.trade_threshold}")
     print(f" - dry_run: {cfg.dry_run}")
+    print(f" - allowed quote assets: {', '.join(cfg.allowed_quote_assets)}")
 
     return cfg
