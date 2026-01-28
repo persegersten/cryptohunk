@@ -170,32 +170,45 @@ class CollectData:
         self._ensure_dir(portfolio_dir)
 
         try:
-            exchange_info = self._get_exchange_info()
             balance = self._get_account_balance()
 
-            # Filtrera så att endast Config.currencies och USDC sparas
-            allowed = {c.upper() for c in self.cfg.currencies}
-            allowed.add("USDC")
+            # Tillåtna assets = union av Config.currencies + Config.allowed_quote_assets (uppercased)
+            allowed_assets = {c.upper() for c in (self.cfg.currencies or [])}
+            allowed_assets.update({q.upper() for q in (self.cfg.allowed_quote_assets or [])})
+
+            # Konfiguration: spara noll-saldon eller inte (förslaget: False)
+            include_zero_balances = False
 
             filtered_total = {}
-            # Binance account response often has 'balances' list
             balances = balance.get("balances") if isinstance(balance, dict) else None
             if isinstance(balances, list):
                 for b in balances:
                     asset = (b.get("asset") or "").upper()
-                    if asset in allowed:
-                        filtered_total[asset] = {"free": b.get("free"), "locked": b.get("locked")}
+                    if asset not in allowed_assets:
+                        continue
+                    free = b.get("free", "0")
+                    locked = b.get("locked", "0")
+                    try:
+                        total = float(free or 0) + float(locked or 0)
+                    except Exception:
+                        # Om parse misslyckas: inkludera för säkerhets skull (så att inget viktigt försvinner)
+                        total = None
+                    if total is None or include_zero_balances or (isinstance(total, (int, float)) and total > 0):
+                        # Spara free/locked som str (som Binance returnerar) för att undvika precision-överraskningar
+                        filtered_total[asset] = {"free": free, "locked": locked, "total": (str(total) if total is not None else None)}
             else:
-                # fallback: if a different structure, attempt to keep top-level assets matching allowed
-                for k, v in (balance.get("balances") or {}):
-                    if k.upper() in allowed:
-                        filtered_total[k.upper()] = v
+                log.warning("Kunde inte läsa 'balances' som lista från account-responsen; sparar inget portfolio-innehåll.")
 
-            portfolio_data = {"timestamp": datetime.utcnow().isoformat(), "balances": filtered_total, "exchange_info": exchange_info}
+            portfolio_data = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "balances": filtered_total,
+                "saved_assets_count": len(filtered_total),
+            }
+
             portfolio_file = portfolio_dir / "portfolio.json"
             with open(portfolio_file, "w", encoding="utf-8") as fh:
                 json.dump(portfolio_data, fh, indent=2, ensure_ascii=False)
-            log.info("Portfolio data sparad: %s", portfolio_file)
+            log.info("Portfolio data sparad: %s (assets=%d)", portfolio_file, len(filtered_total))
         except Exception as e:
             log.error("Fel vid hämtning av portfolio-data: %s", e)
 
