@@ -15,17 +15,17 @@ Modulen `summarize_portfolio` skapar en CSV-sammanställning som innehåller:
 - Aktuellt värde för varje valuta i USDC
 - Föregående köpvärde från tradehistorik
 - Procentuell förändring sedan senaste köp
-- Hanterar valutor som saknas i portfolio (markeras som "n/a")
+- Hanterar valutor som saknas i portfolio (markeras som 0)
 
 Output sparas i: `DATA_AREA_ROOT_DIR/summarised/portfolio.csv`
 
 CSV-format:
 - currency: Valutasymbol (t.ex. BNB, ETH, SOL)
-- balance: Totalt saldo i portfolio
+- balance: Totalt saldo i portfolio (0 om saknas)
 - current_rate_usdc: Aktuell kurs i USDC
-- current_value_usdc: Totalt värde (balance * current_rate)
-- previous_rate_usdc: Senaste köpkurs från trades
-- percentage_change: Procentuell förändring sedan köp
+- current_value_usdc: Totalt värde (balance * current_rate, 0 om balance saknas)
+- previous_rate_usdc: Senaste köpkurs från trades (0 om ingen trade finns)
+- percentage_change: Procentuell förändring sedan köp (0 om ej beräkningsbar)
 
 Ny miljövariabel:
 - QUOTE_ASSETS — kommaseparerad lista med vilka quote-valutor som ska användas när trades hämtas (default: "USDT,USDC")

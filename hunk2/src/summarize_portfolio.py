@@ -6,7 +6,7 @@ This module:
 1. Fetches current USDC exchange rates for currencies from Binance API
 2. Analyzes trade history to find last purchase price for each currency
 3. Calculates percentage change since last purchase
-4. Handles missing currencies by marking them as "n/a"
+4. Handles missing currencies by marking them as 0
 5. Saves the summary to CSV format at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
 """
 import logging
@@ -142,7 +142,7 @@ def summarize_portfolio(cfg: Config) -> None:
     1. Iterates over currencies in Config
     2. Fetches current and previous values
     3. Calculates percentage change
-    4. Handles missing currencies by marking as "n/a"
+    4. Handles missing currencies by marking as 0
     5. Saves to CSV at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
     
     Args:
@@ -207,11 +207,11 @@ def summarize_portfolio(cfg: Config) -> None:
         # Format values for CSV
         row = {
             "currency": currency_upper,
-            "balance": f"{balance:.8f}" if balance is not None else "n/a",
-            "current_rate_usdc": f"{current_rate:.8f}" if current_rate is not None else "n/a",
-            "current_value_usdc": f"{current_value:.8f}" if current_value is not None else "n/a",
-            "previous_rate_usdc": f"{previous_rate:.8f}" if previous_rate is not None else "n/a",
-            "percentage_change": f"{percentage_change:.2f}" if percentage_change is not None else "n/a"
+            "balance": f"{balance:.8f}" if balance is not None else "0.00000000",
+            "current_rate_usdc": f"{current_rate:.8f}" if current_rate is not None else "0.00000000",
+            "current_value_usdc": f"{current_value:.8f}" if current_value is not None else "0.00000000",
+            "previous_rate_usdc": f"{previous_rate:.8f}" if previous_rate is not None else "0.00000000",
+            "percentage_change": f"{percentage_change:.2f}" if percentage_change is not None else "0.00"
         }
         
         summary_rows.append(row)
