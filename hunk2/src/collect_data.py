@@ -52,6 +52,7 @@ class CollectData:
             print(f"Time synchronized with Binance. Offset: {self.time_offset}ms")
         except Exception as e:
             print(f"Warning: Failed to sync time with Binance: {e}")
+            print("Warning: Signed requests may fail if local clock is significantly off from Binance server time.")
             self.time_offset = 0
     
     def _get_timestamp(self) -> int:
@@ -64,17 +65,35 @@ class CollectData:
     def _sign_request(self, params: dict) -> str:
         """
         Sign a request with HMAC SHA256.
-        Adds timestamp and signature to params.
+        Adds timestamp and signature to params copy.
+        Returns query string with signature.
         """
-        params["timestamp"] = self._get_timestamp()
-        query_string = urlencode(params)
+        # Create a copy to avoid mutating the original params
+        params_copy = params.copy()
+        params_copy["timestamp"] = self._get_timestamp()
+        query_string = urlencode(params_copy)
         signature = hmac.new(
             self.cfg.binance_secret.encode("utf-8"),
             query_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest()
-        params["signature"] = signature
         return query_string + f"&signature={signature}"
+    
+    def _handle_1021_retry(self, url: str, params: dict, signed: bool, headers: dict, timeout: int) -> requests.Response:
+        """
+        Helper to retry a request after handling -1021 timestamp error.
+        """
+        print("Received -1021 timestamp error, re-syncing time and retrying...")
+        self._sync_time()
+        # Retry once
+        if signed:
+            query_string = self._sign_request(params)
+            full_url = f"{url}?{query_string}"
+            resp = requests.get(full_url, headers=headers, timeout=timeout)
+        else:
+            resp = requests.get(url, params=params, timeout=timeout)
+        resp.raise_for_status()
+        return resp
     
     def _request_with_retry(self, url: str, params: dict, signed: bool = False, timeout: int = 30) -> requests.Response:
         """
@@ -95,21 +114,12 @@ class CollectData:
                 resp = requests.get(full_url, params=params, timeout=timeout)
             resp.raise_for_status()
             
-            # Check for Binance error code -1021 (timestamp error)
+            # Check for Binance error code -1021 (timestamp error) in successful response
             if resp.status_code == 200:
                 try:
                     data = resp.json()
                     if isinstance(data, dict) and data.get("code") == -1021:
-                        print("Received -1021 timestamp error, re-syncing time and retrying...")
-                        self._sync_time()
-                        # Retry once
-                        if signed:
-                            query_string = self._sign_request(params)
-                            full_url = f"{url}?{query_string}"
-                            resp = requests.get(full_url, headers=headers, timeout=timeout)
-                        else:
-                            resp = requests.get(full_url, params=params, timeout=timeout)
-                        resp.raise_for_status()
+                        return self._handle_1021_retry(url, params, signed, headers, timeout)
                 except (ValueError, KeyError):
                     pass  # Not JSON or no error code
             
@@ -119,17 +129,7 @@ class CollectData:
             try:
                 error_data = e.response.json()
                 if error_data.get("code") == -1021:
-                    print("Received -1021 timestamp error, re-syncing time and retrying...")
-                    self._sync_time()
-                    # Retry once
-                    if signed:
-                        query_string = self._sign_request(params)
-                        full_url = f"{url}?{query_string}"
-                        resp = requests.get(full_url, headers=headers, timeout=timeout)
-                    else:
-                        resp = requests.get(full_url, params=params, timeout=timeout)
-                    resp.raise_for_status()
-                    return resp
+                    return self._handle_1021_retry(url, params, signed, headers, timeout)
             except (ValueError, AttributeError):
                 pass
             raise
@@ -144,8 +144,11 @@ class CollectData:
         out_root = base / "history"
         _ensure_dir(out_root)
         
+        # Use first quote asset from config (defaults to USDT for backwards compatibility)
+        quote_asset = self.cfg.allowed_quote_assets[0] if self.cfg.allowed_quote_assets else "USDT"
+        
         for cur in self.cfg.currencies:
-            symbol = f"{cur}USDT"
+            symbol = f"{cur}{quote_asset}"
             params = {
                 "symbol": symbol,
                 "interval": self.cfg.currency_history_period,
@@ -253,6 +256,9 @@ class CollectData:
                 "ccxt krävs för att hämta tradehistorik. Installera med: pip install ccxt"
             )
         
+        # Use first quote asset from config (defaults to USDT for backwards compatibility)
+        quote_asset = self.cfg.allowed_quote_assets[0] if self.cfg.allowed_quote_assets else "USDT"
+        
         try:
             exchange = ccxt.binance(
                 {
@@ -263,7 +269,7 @@ class CollectData:
             )
             
             for cur in self.cfg.currencies:
-                symbol = f"{cur}/USDT"
+                symbol = f"{cur}/{quote_asset}"
                 try:
                     trades = exchange.fetch_my_trades(symbol)
                 except Exception as e:
