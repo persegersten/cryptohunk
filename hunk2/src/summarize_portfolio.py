@@ -14,12 +14,10 @@ import json
 import csv
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Optional
 
 from .config import Config
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 
@@ -94,15 +92,17 @@ def fetch_previous_usdc_value(cfg: Config, currency: str) -> Optional[float]:
         
         # Filter trades for this currency where it was bought (isBuyer=true)
         # Check for both USDC and USDT as quote assets
+        # Use exact symbol matching to avoid false positives
         relevant_trades = []
+        currency_usdc = f"{currency.upper()}USDC"
+        currency_usdt = f"{currency.upper()}USDT"
+        
         for trade in trades:
             symbol = trade.get("symbol", "")
             is_buyer = trade.get("isBuyer", False)
             
-            # Check if this trade involves our currency as base asset with USDC or USDT quote
-            if (symbol.startswith(currency.upper()) and 
-                (symbol.endswith("USDC") or symbol.endswith("USDT")) and 
-                is_buyer):
+            # Check if this trade involves our currency with exact symbol match
+            if (symbol == currency_usdc or symbol == currency_usdt) and is_buyer:
                 relevant_trades.append(trade)
         
         if not relevant_trades:
