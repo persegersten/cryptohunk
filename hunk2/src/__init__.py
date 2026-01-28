@@ -4,5 +4,6 @@ __all__ = [
             "clean_data_area",
             "config", 
             "main", 
-            "validate_collected_data"
+            "validate_collected_data",
+            "summarize_portfolio"
            ]
