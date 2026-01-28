@@ -18,3 +18,4 @@ class Config:
     currency_history_nof_elements: int
     trade_threshold: float
     raw_env: dict
+    allowed_quote_assets: List[str]

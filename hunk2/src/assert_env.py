@@ -75,6 +75,8 @@ def load_config_from_env() -> Config:
     if not currencies:
         raise EnvironmentError("CURRENCIES måste innehålla minst en valuta.")
 
+    allowed_quote_assets = _parse_currencies(env.get("QUOTE_ASSETS", "USDT,USDC"))
+
     binance_secret = env.get("BINANCE_SECRET", "").strip()
     binance_key = env.get("BINANCE_KEY", "").strip()
     binance_trading_url = env.get("BINANCE_TRADING_URL", "").strip()
@@ -120,6 +122,7 @@ def load_config_from_env() -> Config:
         currency_history_nof_elements=currency_history_nof_elements,
         trade_threshold=trade_threshold,
         raw_env={k: env.get(k) for k in list(env.keys())},
+        allowed_quote_assets=allowed_quote_assets,
     )
 
     return cfg
@@ -135,6 +138,7 @@ def assert_env_and_report() -> Config:
     # Minimal rapport (inga hemliga värden skrivs ut)
     print("AssertEnv: miljövariabler validerade.")
     print(f" - currencies: {', '.join(cfg.currencies)}")
+    print(f" - allowed_quote_assets: {', '.join(cfg.allowed_quote_assets)}")
     print(f" - binance_base_url: {cfg.binance_base_url}")
     print(f" - data_area_root_dir: {cfg.data_area_root_dir}")
     print(f" - currency_history_period: {cfg.currency_history_period}")

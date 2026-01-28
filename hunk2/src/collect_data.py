@@ -152,18 +152,20 @@ def collect_trade_history(cfg: Config) -> None:
         )
 
         for cur in cfg.currencies:
-            symbol = f"{cur}/USDT"
-            try:
-                trades = exchange.fetch_my_trades(symbol)
-            except Exception as e:
-                print(f"Fel vid hämtning av trades för {symbol}: {e}")
-                trades = []
+            for quote in cfg.allowed_quote_assets:
+                symbol = f"{cur}/{quote}"
+                try:
+                    trades = exchange.fetch_my_trades(symbol)
+                except Exception as e:
+                    print(f"Fel vid hämtning av trades för {symbol}: {e}")
+                    trades = []
 
-            out_file = out_root / f"{cur}_trades_{_timestamp()}.json"
-            with out_file.open("w", encoding="utf-8") as fh:
-                json.dump(trades, fh, default=str, indent=2)
+                if trades:
+                    out_file = out_root / f"{cur}_{quote}_trades_{_timestamp()}.json"
+                    with out_file.open("w", encoding="utf-8") as fh:
+                        json.dump(trades, fh, default=str, indent=2)
 
-            print(f"Sparad trade-historik för {symbol} -> {out_file}")
+                    print(f"Sparad trade-historik för {symbol} -> {out_file}")
 
     except Exception as e:
         print(f"Fel vid initiering av ccxt exchange för trade-historik: {e}")
