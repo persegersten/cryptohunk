@@ -11,6 +11,7 @@ from .assert_env import assert_env_and_report
 from .clean_data import clean_data_area
 from .collect_data import collect_all as collect_data_all
 from .validate_collected_data import validate_collected_data
+from .summarize_portfolio import summarize_portfolio_main
 
 
 def main():
@@ -63,6 +64,9 @@ def main():
         collect_data_all(cfg)
     
     validate_collected_data(cfg)
+    
+    print("Startar sammanställning av portfolio...")
+    summarize_portfolio_main(cfg)
 
     print("\nKlar.")
 
