@@ -10,6 +10,7 @@ import argparse
 from .assert_env import assert_env_and_report
 from .clean_data import clean_data_area
 from .collect_data import collect_all as collect_data_all
+from .validate_collected_data import validate_collected_data
 
 
 def main():
@@ -60,6 +61,8 @@ def main():
     if args.collect_data:
         print("Startar insamling av data (CollectData)...")
         collect_data_all(cfg)
+    
+    validate_collected_data(cfg)
 
     print("\nKlar.")
 
