@@ -1,38 +1,22 @@
-# CryptoHunk2.0 (start)
+```markdown
+Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/src/`.
 
-Detta är en basstruktur för CryptoHunk2.0. Källkod ligger i `cryptohunk2/`.
+Ny miljövariabel:
+- QUOTE_ASSETS — kommaseparerad lista med vilka quote-valutor som ska användas när trades hämtas (default: "USDT,USDC")
 
-Syfte i denna initiala commit:
-- Implementerat steg 1: AssertEnv — validerar nödvändiga miljövariabler och bygger en Config.
-- Tillhandahåller `cryptohunk2/main.py` som orchestrator/entrypoint.
-- En `run.sh` för att köra programmet från shell.
+Exempel (bash):
+export CURRENCIES="BNB,ETH,SOL"
+export QUOTE_ASSETS="USDT,USDC"   # Lägg till BUSD eller andra quotes vid behov
+export BINANCE_KEY="din_key"
+export BINANCE_SECRET="din_secret"
+export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
+export DATA_AREA_ROOT_DIR="/home/perseg/dev/cryptotrader/tmp/cryptohunk_data"
+export CURRENCY_HISTORY_PERIOD="1h"
+export CURRENCY_HISTORY_NOF_ELEMENTS="100"
+export TRADE_THRESHOLD="0.02"
+export DRY_RUN="true"
 
-Hur man kör:
-1. Sätt miljövariablerna (exempel):
-   - CURRENCIES="BNB,ETH,SOL"
-   - BINANCE_KEY, BINANCE_SECRET
-   - BINANCE_TRADING_URL (URL som används för trade-anrop)
-   - DATA_AREA_ROOT_DIR
-   - CURRENCY_HISTORY_PERIOD
-   - CURRENCY_HISTORY_NOF_ELEMENTS (heltal)
-   - TRADE_THRESHOLD (float)
-   - DRY_RUN (true/false, valfritt)
-
-2. Prepare Python:
-   - pyenv install $(cat .python-version)  # optional
-   - python -m venv .venv
-   - source .venv/bin/activate
-   - pip install -r requirements.txt
-
-3. Install and configure `run.sh`:
-   - cp run.sh.template run.sh
-   - Edit `run.sh` to add environment variables (do not commit)
-   - chmod +x run.sh
-   - ./run.sh
-
-Eller direkt:
-   python3 -m cryptohunk2.main --dump-config
-
-Nästa steg att implementera:
-- Hämta historisk prisdata (steg: fetch_history.py)
-- Häm
+Kör:
+chmod +x run.sh
+./run.sh
+```
