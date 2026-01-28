@@ -3,6 +3,7 @@ AssertEnv - verifiera att nödvändiga env-variabler finns och bygg Config-objek
 
 Miljövariabler som hanteras:
 - CURRENCIES (kommaseparerad lista, ex "BNB,ETH,SOL")
+- QUOTE_ASSETS (kommaseparerad lista, ex "USDT,USDC", default "USDT,USDC")
 - BINANCE_SECRET
 - BINANCE_KEY
 - BINANCE_BASE_URL (om ej satt används https://api.binance.com)

@@ -58,47 +58,60 @@ def test_config_dataclass():
 
 def test_load_config_with_quote_assets():
     """Test loading config with QUOTE_ASSETS env var."""
-    # Set up minimal environment
-    os.environ["CURRENCIES"] = "BTC,ETH"
-    os.environ["BINANCE_SECRET"] = "test_secret"
-    os.environ["BINANCE_KEY"] = "test_key"
-    os.environ["BINANCE_TRADING_URL"] = "https://trading.binance.com"
-    os.environ["DATA_AREA_ROOT_DIR"] = "/tmp/test"
-    os.environ["CURRENCY_HISTORY_PERIOD"] = "1h"
-    os.environ["CURRENCY_HISTORY_NOF_ELEMENTS"] = "100"
-    os.environ["TRADE_THRESHOLD"] = "0.01"
-    os.environ["QUOTE_ASSETS"] = "USDT,BUSD,EUR"
+    # Save original environment
+    original_env = os.environ.copy()
     
-    cfg = load_config_from_env()
-    
-    assert cfg.allowed_quote_assets == ["USDT", "BUSD", "EUR"], \
-        f"Expected ['USDT', 'BUSD', 'EUR'], got {cfg.allowed_quote_assets}"
-    
-    print("✓ load_config_from_env with QUOTE_ASSETS test passed")
+    try:
+        # Set up minimal environment
+        os.environ["CURRENCIES"] = "BTC,ETH"
+        os.environ["BINANCE_SECRET"] = "test_secret"
+        os.environ["BINANCE_KEY"] = "test_key"
+        os.environ["BINANCE_TRADING_URL"] = "https://trading.binance.com"
+        os.environ["DATA_AREA_ROOT_DIR"] = "/tmp/test"
+        os.environ["CURRENCY_HISTORY_PERIOD"] = "1h"
+        os.environ["CURRENCY_HISTORY_NOF_ELEMENTS"] = "100"
+        os.environ["TRADE_THRESHOLD"] = "0.01"
+        os.environ["QUOTE_ASSETS"] = "USDT,BUSD,EUR"
+        
+        cfg = load_config_from_env()
+        
+        assert cfg.allowed_quote_assets == ["USDT", "BUSD", "EUR"], \
+            f"Expected ['USDT', 'BUSD', 'EUR'], got {cfg.allowed_quote_assets}"
+        
+        print("✓ load_config_from_env with QUOTE_ASSETS test passed")
+    finally:
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(original_env)
 
 
 def test_default_quote_assets():
     """Test that QUOTE_ASSETS defaults to USDT,USDC."""
-    # Set up minimal environment without QUOTE_ASSETS
-    os.environ["CURRENCIES"] = "BTC,ETH"
-    os.environ["BINANCE_SECRET"] = "test_secret"
-    os.environ["BINANCE_KEY"] = "test_key"
-    os.environ["BINANCE_TRADING_URL"] = "https://trading.binance.com"
-    os.environ["DATA_AREA_ROOT_DIR"] = "/tmp/test"
-    os.environ["CURRENCY_HISTORY_PERIOD"] = "1h"
-    os.environ["CURRENCY_HISTORY_NOF_ELEMENTS"] = "100"
-    os.environ["TRADE_THRESHOLD"] = "0.01"
+    # Save original environment
+    original_env = os.environ.copy()
     
-    # Remove QUOTE_ASSETS if it exists
-    if "QUOTE_ASSETS" in os.environ:
-        del os.environ["QUOTE_ASSETS"]
-    
-    cfg = load_config_from_env()
-    
-    assert cfg.allowed_quote_assets == ["USDT", "USDC"], \
-        f"Expected default ['USDT', 'USDC'], got {cfg.allowed_quote_assets}"
-    
-    print("✓ Default QUOTE_ASSETS test passed")
+    try:
+        # Set up minimal environment without QUOTE_ASSETS
+        os.environ.clear()
+        os.environ["CURRENCIES"] = "BTC,ETH"
+        os.environ["BINANCE_SECRET"] = "test_secret"
+        os.environ["BINANCE_KEY"] = "test_key"
+        os.environ["BINANCE_TRADING_URL"] = "https://trading.binance.com"
+        os.environ["DATA_AREA_ROOT_DIR"] = "/tmp/test"
+        os.environ["CURRENCY_HISTORY_PERIOD"] = "1h"
+        os.environ["CURRENCY_HISTORY_NOF_ELEMENTS"] = "100"
+        os.environ["TRADE_THRESHOLD"] = "0.01"
+        
+        cfg = load_config_from_env()
+        
+        assert cfg.allowed_quote_assets == ["USDT", "USDC"], \
+            f"Expected default ['USDT', 'USDC'], got {cfg.allowed_quote_assets}"
+        
+        print("✓ Default QUOTE_ASSETS test passed")
+    finally:
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(original_env)
 
 
 if __name__ == "__main__":

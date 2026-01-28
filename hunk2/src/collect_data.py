@@ -129,7 +129,8 @@ def collect_trade_history(cfg: Config) -> None:
     """
     Hämta tradehistorik för kontot via ccxt och spara per valuta.
 
-    Sparas i: DATA_AREA_ROOT_DIR/trades/<currency>_trades_<timestamp>.json
+    Sparas i: DATA_AREA_ROOT_DIR/trades/<currency>_<quote>_trades_<timestamp>.json
+    Endast filer med trades skapas.
     """
     base = Path(cfg.data_area_root_dir)
     out_root = base / "trades"
