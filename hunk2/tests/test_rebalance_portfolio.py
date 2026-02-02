@@ -148,7 +148,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             'RSI_14': 50.0,        # Neutral: 0
             'EMA_12': 50000.0,     # = EMA_26: 0
             'EMA_26': 50000.0,
-            'MACD': 5.0,           # > Signal: +1
+            'MACD': 5.0,           # = Signal: 0
             'MACD_Signal': 5.0,    # = MACD: 0
             'Close': 50000.0,      # = EMA_200: 0
             'EMA_200': 50000.0
