@@ -110,7 +110,7 @@ class RebalancePortfolio:
             last_row: Last row of TA data
         
         Returns:
-            TA score (integer)
+            TA score (integer). Returns 0 if calculation fails.
         """
         score = 0
         
@@ -152,6 +152,7 @@ class RebalancePortfolio:
         
         except Exception as e:
             log.error(f"Error calculating TA score: {e}")
+            return 0
         
         return score
 
