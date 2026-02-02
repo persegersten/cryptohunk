@@ -218,8 +218,8 @@ def summarize_portfolio(cfg: Config) -> None:
             "balance": f"{balance:.8f}" if balance is not None else "0.00000000",
             "current_rate_usdc": f"{current_rate:.8f}" if current_rate is not None else "0.00000000",
             "current_value_usdc": f"{current_value:.8f}" if current_value is not None else "0.00000000",
-            "value_change_usdc": f"{value_change_usdc:.8f}" if value_change_usdc is not None else "0.00000000",
             "previous_rate_usdc": f"{previous_rate:.8f}" if previous_rate is not None else "0.00000000",
+            "value_change_usdc": f"{value_change_usdc:.8f}" if value_change_usdc is not None else "0.00000000",
             "percentage_change": f"{percentage_change:.2f}" if percentage_change is not None else "0.00"
         }
         
