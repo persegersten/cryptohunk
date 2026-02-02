@@ -8,6 +8,7 @@ Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/sr
 4. **validate_collected_data** - Validerar att insamlad data finns
 5. **summarize_portfolio** - Skapar sammanställning av portfolio med värden och förändringar
 6. **technical_analysis** - Beräknar tekniska indikatorer (RSI, EMA, MACD) på kurshistorik
+7. **rebalance_portfolio** - Genererar köp/säljrekommendationer baserat på TA-signaler och innehav
 
 ## Ny funktionalitet: Technical Analysis
 
@@ -86,6 +87,56 @@ python3 -m hunk2.src.main --collect-data
 
 # Kör teknisk analys
 python3 -m hunk2.src.main --run-ta
+
+# Kör rebalansering av portfölj
+python3 -m hunk2.src.main --rebalance-portfolio
+```
+
+## Funktionalitet: Portfolio Rebalancing
+
+Modulen `rebalance_portfolio` genererar köp/säljrekommendationer baserat på teknisk analys och portföljregler:
+
+**Steg 1: TA-poängberäkning**
+- RSI_14 < 30: +1 (översålt)
+- RSI_14 > 70: -1 (överköpt)
+- EMA_12 > EMA_26: +1 (bullish korsning)
+- EMA_12 < EMA_26: -1 (bearish korsning)
+- MACD > MACD_Signal: +1 (bullish momentum)
+- MACD < MACD_Signal: -1 (bearish momentum)
+- Close > EMA_200: +1 (över långsiktig trend)
+- Close < EMA_200: -1 (under långsiktig trend)
+
+**Signaler:**
+- Poäng >= 1: BUY-signal
+- Poäng <= -1: SELL-signal
+
+**Steg 2: Override-regel**
+Om innehav < TRADE_THRESHOLD (i USDC) OCH vinst > 10%: SELL (trumfar TA)
+
+**Steg 3: Skyddsregel**
+Om innehav < TRADE_THRESHOLD: ingen SELL tillåts (förutom override i steg 2)
+
+**Urvalsregler:**
+- Max 1 BUY tillåts (välj högst TA-poäng, första vid lika)
+- Flera SELL tillåts
+
+**Input:**
+- `DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv` - TA-signaler
+- `DATA_AREA_ROOT_DIR/summarised/portfolio.csv` - Portfolio-sammanställning
+
+**Output:** `DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv`
+
+CSV-format (output):
+- currency: Valutasymbol
+- ta_score: TA-poäng
+- current_value_usdc: Nuvarande värde i USDC
+- percentage_change: Procentuell förändring sedan senaste köp
+- signal: BUY eller SELL
+
+**Körning:**
+```bash
+# Kör rebalansering (kräver att TA och portfolio summary körts först)
+python3 -m hunk2.src.main --rebalance-portfolio
 ```
 
 ## Tester
