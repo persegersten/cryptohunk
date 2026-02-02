@@ -13,6 +13,7 @@ from .collect_data import collect_all as collect_data_all
 from .validate_collected_data import validate_collected_data
 from .summarize_portfolio import summarize_portfolio_main
 from .technical_analysis import technical_analysis_main
+from .rebalance_portfolio import rebalance_portfolio_main
 
 
 def main():
@@ -36,6 +37,11 @@ def main():
         "--run-ta",
         action="store_true",
         help="Kör teknisk analys på historisk data",
+    )
+    parser.add_argument(
+        "--rebalance-portfolio",
+        action="store_true",
+        help="Generera köp/säljrekommendationer baserat på TA-signaler och innehav",
     )
     args = parser.parse_args()
 
@@ -78,6 +84,10 @@ def main():
     if args.run_ta:
         print("Startar teknisk analys (TechnicalAnalysis)...")
         technical_analysis_main(cfg)
+
+    if args.rebalance_portfolio:
+        print("Startar rebalansering av portfölj (RebalancePortfolio)...")
+        rebalance_portfolio_main(cfg)
 
     print("\nKlar.")
 
