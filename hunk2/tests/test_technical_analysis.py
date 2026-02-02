@@ -12,11 +12,12 @@ import pandas as pd
 import sys
 import os
 
-# Lägg till src till path för att kunna importera moduler
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Lägg till projektets rotmapp till path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from technical_analysis import TechnicalAnalysis
-from config import Config
+from hunk2.src.technical_analysis import TechnicalAnalysis
+from hunk2.src.config import Config
 
 
 class TestTechnicalAnalysis(unittest.TestCase):

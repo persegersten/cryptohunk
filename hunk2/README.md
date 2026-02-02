@@ -1,4 +1,3 @@
-```markdown
 Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/src/`.
 
 ## Moduler
@@ -8,8 +7,44 @@ Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/sr
 3. **collect_data** - Hämtar data från Binance (historik, portfolio, trades)
 4. **validate_collected_data** - Validerar att insamlad data finns
 5. **summarize_portfolio** - Skapar sammanställning av portfolio med värden och förändringar
+6. **technical_analysis** - Beräknar tekniska indikatorer (RSI, EMA, MACD) på kurshistorik
 
-## Ny funktionalitet: Portfolio Summarization
+## Ny funktionalitet: Technical Analysis
+
+Modulen `technical_analysis` beräknar tekniska indikatorer på historisk kursdata:
+
+**Indikatorer som beräknas:**
+- RSI (Relative Strength Index, 14 perioder)
+- EMA (Exponential Moving Average, 12 perioder)
+- EMA (26 perioder)
+- EMA (200 perioder)
+- MACD (Moving Average Convergence Divergence)
+- MACD Signal Line
+- MACD Histogram
+
+**Input:** `DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv`
+
+**Output:** `DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv`
+
+CSV-format (output):
+- Open_Time_ms: Öppningstid i millisekunder
+- Close_Time_ms: Stängningstid i millisekunder
+- Close: Stängningspris
+- RSI_14: RSI med 14 perioders lookback
+- EMA_12: Exponentiellt glidande medelvärde (12 perioder)
+- EMA_26: Exponentiellt glidande medelvärde (26 perioder)
+- EMA_200: Exponentiellt glidande medelvärde (200 perioder)
+- MACD: MACD-linje (EMA_12 - EMA_26)
+- MACD_Signal: Signal-linje (9-periods EMA av MACD)
+- MACD_Histogram: MACD histogram (MACD - MACD_Signal)
+
+**Körning:**
+```bash
+# Kör teknisk analys på befintlig historik
+python3 -m hunk2.src.main --run-ta
+```
+
+## Funktionalitet: Portfolio Summarization
 
 Modulen `summarize_portfolio` skapar en CSV-sammanställning som innehåller:
 - Aktuellt värde för varje valuta i USDC
@@ -30,7 +65,9 @@ CSV-format:
 Ny miljövariabel:
 - QUOTE_ASSETS — kommaseparerad lista med vilka quote-valutor som ska användas när trades hämtas (default: "USDT,USDC")
 
-Exempel (bash):
+## Exempel (bash)
+
+```bash
 export CURRENCIES="BNB,ETH,SOL"
 export QUOTE_ASSETS="USDT,USDC"   # Lägg till BUSD eller andra quotes vid behov
 export BINANCE_KEY="din_key"
@@ -42,10 +79,17 @@ export CURRENCY_HISTORY_NOF_ELEMENTS="100"
 export TRADE_THRESHOLD="0.02"
 export DRY_RUN="true"
 
-Kör:
-chmod +x run.sh
-./run.sh
-
-För att samla data och skapa sammanställning:
+# Kör data collection
 python3 -m hunk2.src.main --collect-data
+
+# Kör teknisk analys
+python3 -m hunk2.src.main --run-ta
+```
+
+## Tester
+
+Tester för modulerna finns i `hunk2/tests/`. Kör tester med:
+
+```bash
+python3 -m unittest discover hunk2/tests
 ```
