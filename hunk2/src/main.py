@@ -12,6 +12,7 @@ from .clean_data import clean_data_area
 from .collect_data import collect_all as collect_data_all
 from .validate_collected_data import validate_collected_data
 from .summarize_portfolio import summarize_portfolio_main
+from .technical_analysis import technical_analysis_main
 
 
 def main():
@@ -30,6 +31,11 @@ def main():
         "--collect-data",
         action="store_true",
         help="Hämta historik, portfolio och trade-historik",
+    )
+    parser.add_argument(
+        "--run-ta",
+        action="store_true",
+        help="Kör teknisk analys på historisk data",
     )
     args = parser.parse_args()
 
@@ -68,6 +74,10 @@ def main():
         
         print("Startar sammanställning av portfolio...")
         summarize_portfolio_main(cfg)
+
+    if args.run_ta:
+        print("Startar teknisk analys (TechnicalAnalysis)...")
+        technical_analysis_main(cfg)
 
     print("\nKlar.")
 
