@@ -25,9 +25,9 @@ CSV-format:
 - balance: Totalt saldo i portfolio (0 om saknas)
 - current_rate_usdc: Aktuell kurs i USDC
 - current_value_usdc: Totalt värde (balance * current_rate, 0 om balance saknas)
-- value_change_usdc: Absolut värdeförändring i USDC (current_value - (previous_rate * balance), 0 om ej beräkningsbar)
 - previous_rate_usdc: Senaste köpkurs från trades (0 om ingen trade finns)
 - percentage_change: Procentuell förändring sedan köp (0 om ej beräkningsbar)
+- value_change_usdc: Absolut värdeförändring i USDC (current_value - (previous_rate * balance), 0 om ej beräkningsbar)
 
 Ny miljövariabel:
 - QUOTE_ASSETS — kommaseparerad lista med vilka quote-valutor som ska användas när trades hämtas (default: "USDT,USDC")

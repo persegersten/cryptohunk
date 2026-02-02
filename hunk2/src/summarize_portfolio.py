@@ -234,7 +234,7 @@ def summarize_portfolio(cfg: Config) -> None:
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
             if summary_rows:
                 fieldnames = ["currency", "balance", "current_rate_usdc", "current_value_usdc", 
-                             "value_change_usdc", "previous_rate_usdc", "percentage_change"]
+                             "previous_rate_usdc", "percentage_change", "value_change_usdc"]
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(summary_rows)
