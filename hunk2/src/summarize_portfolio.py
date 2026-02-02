@@ -6,8 +6,9 @@ This module:
 1. Fetches current USDC exchange rates for currencies from Binance API
 2. Analyzes trade history to find last purchase price for each currency
 3. Calculates percentage change since last purchase
-4. Handles missing currencies by marking them as 0
-5. Saves the summary to CSV format at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
+4. Calculates absolute value change in USDC: CurrentValue_USDC - (PreviousRate * Balance)
+5. Handles missing currencies by marking them as 0
+6. Saves the summary to CSV format at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
 """
 import logging
 import json
@@ -142,8 +143,9 @@ def summarize_portfolio(cfg: Config) -> None:
     1. Iterates over currencies in Config
     2. Fetches current and previous values
     3. Calculates percentage change
-    4. Handles missing currencies by marking as 0
-    5. Saves to CSV at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
+    4. Calculates absolute value change in USDC
+    5. Handles missing currencies by marking as 0
+    6. Saves to CSV at DATA_AREA_ROOT_DIR/summarised/portfolio.csv
     
     Args:
         cfg: Configuration object
@@ -204,6 +206,12 @@ def summarize_portfolio(cfg: Config) -> None:
         else:
             percentage_change = None
         
+        # Calculate value change in USDC: CurrentValue_USDC - (PreviousRate * Balance)
+        if current_value is not None and previous_rate is not None and balance is not None:
+            value_change_usdc = current_value - (previous_rate * balance)
+        else:
+            value_change_usdc = None
+        
         # Format values for CSV
         row = {
             "currency": currency_upper,
@@ -211,11 +219,13 @@ def summarize_portfolio(cfg: Config) -> None:
             "current_rate_usdc": f"{current_rate:.8f}" if current_rate is not None else "0.00000000",
             "current_value_usdc": f"{current_value:.8f}" if current_value is not None else "0.00000000",
             "previous_rate_usdc": f"{previous_rate:.8f}" if previous_rate is not None else "0.00000000",
+            "value_change_usdc": f"{value_change_usdc:.8f}" if value_change_usdc is not None else "0.00000000",
             "percentage_change": f"{percentage_change:.2f}" if percentage_change is not None else "0.00"
         }
         
         summary_rows.append(row)
         log.info(f"{currency_upper}: balance={row['balance']}, current_rate={row['current_rate_usdc']}, "
+                 f"current_value={row['current_value_usdc']}, value_change={row['value_change_usdc']}, "
                  f"previous_rate={row['previous_rate_usdc']}, change={row['percentage_change']}%")
     
     # Write to CSV
@@ -224,7 +234,7 @@ def summarize_portfolio(cfg: Config) -> None:
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
             if summary_rows:
                 fieldnames = ["currency", "balance", "current_rate_usdc", "current_value_usdc", 
-                             "previous_rate_usdc", "percentage_change"]
+                             "previous_rate_usdc", "percentage_change", "value_change_usdc"]
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(summary_rows)
