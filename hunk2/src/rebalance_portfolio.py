@@ -97,14 +97,14 @@ class RebalancePortfolio:
         Calculate TA score for the last data point.
         
         Scoring rules:
-        - rsi_14 < 30: +1
-        - rsi_14 > 70: -1
-        - ema_12 > ema_26: +1
-        - ema_12 < ema_26: -1
-        - macd > macd_signal: +1
-        - macd < macd_signal: -1
-        - close > ema_200: +1
-        - close < ema_200: -1
+        - RSI_14 < 30: +1
+        - RSI_14 > 70: -1
+        - EMA_12 > EMA_26: +1
+        - EMA_12 < EMA_26: -1
+        - MACD > MACD_Signal: +1
+        - MACD < MACD_Signal: -1
+        - Close > EMA_200: +1
+        - Close < EMA_200: -1
         
         Args:
             last_row: Last row of TA data
