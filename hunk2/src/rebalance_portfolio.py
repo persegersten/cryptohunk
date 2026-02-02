@@ -147,6 +147,10 @@ class RebalancePortfolio:
         """
         Generate rebalance recommendations for all currencies.
         
+        Only one currency can receive a BUY recommendation. When multiple currencies have
+        positive scores, the one with the highest score is selected. In case of a tie,
+        the first currency in alphabetical order is chosen.
+        
         Returns:
             List of recommendation dictionaries with keys: currency, action, score, reason
         """

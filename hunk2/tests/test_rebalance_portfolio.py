@@ -29,7 +29,7 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.data_root = Path(self.test_dir)
         
-        # Create directory structure
+        # Define directory structure (individual tests create as needed)
         self.ta_dir = self.data_root / "ta"
         self.summarised_dir = self.data_root / "summarised"
         self.output_dir = self.data_root / "output" / "rebalance"
