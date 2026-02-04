@@ -12,10 +12,11 @@ This module:
    - Close > EMA_200: +1, Close < EMA_200: -1
 4. Generates signals: score >= 1 = BUY, score <= -1 = SELL
 5. Applies override rules:
-   - If holdings < TRADE_THRESHOLD and profit > 10%: SELL (overrides TA)
-   - If holdings < TRADE_THRESHOLD: no SELL
-6. Selects max 1 BUY (highest score, first if tie), multiple SELL allowed
-7. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
+   - Step 2: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
+   - Step 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Step 2 applies)
+6. TA is only calculated if currency has holdings (current_value_usdc > 0)
+7. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
+8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 """
 import logging
 import csv
@@ -157,15 +158,14 @@ class RebalancePortfolio:
         return score
 
     def _generate_signal(self, currency: str, ta_score: int, 
-                        current_value_usdc: float, percentage_change: float) -> str:
+                        current_value_usdc: float, percentage_change: float) -> tuple:
         """
         Generate BUY/SELL/HOLD signal based on TA score and portfolio rules.
         
         Rules:
-        1. If score >= 1: BUY signal
-        2. If score <= -1: SELL signal
-        3. Override: If holdings < TRADE_THRESHOLD and profit > 10%: SELL (trumps TA)
-        4. If holdings < TRADE_THRESHOLD: no SELL
+        - Step 2: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
+        - Step 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
+        - Otherwise: TA-based signals (score >= 1: BUY, score <= -1: SELL)
         
         Args:
             currency: Currency symbol
@@ -174,29 +174,31 @@ class RebalancePortfolio:
             percentage_change: Percentage change since last purchase
         
         Returns:
-            Signal: "BUY", "SELL", or "HOLD"
+            Tuple of (signal, priority) where:
+            - signal: "BUY", "SELL", or "HOLD"
+            - priority: 1 for Step 2 (10% rule with small holdings), 2 for TA-based
         """
         trade_threshold = self.cfg.trade_threshold
         
-        # Step 3: If holdings < TRADE_THRESHOLD, no SELL
+        # Check if holdings are below threshold
         if current_value_usdc < trade_threshold:
-            # Step 2 override: If profit > 10%, force SELL even with small holdings
+            # Step 2: If profit > 10%, force SELL even with small holdings (highest priority)
             if percentage_change > 10.0:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > 10% -> SELL (override)")
-                return "SELL"
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > 10% -> SELL (Step 2 priority)")
+                return "SELL", 1
             
-            # Don't sell if holdings are too small
+            # Step 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
             if ta_score <= -1:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (despite TA score {ta_score})")
-                return "HOLD"
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Step 3, despite TA score {ta_score})")
+                return "HOLD", 2
         
-        # Step 1: Normal TA-based signals
+        # TA-based signals for normal cases
         if ta_score >= 1:
-            return "BUY"
+            return "BUY", 2
         elif ta_score <= -1:
-            return "SELL"
+            return "SELL", 2
         else:
-            return "HOLD"
+            return "HOLD", 2
 
     def generate_recommendations(self) -> List[Dict]:
         """
@@ -220,17 +222,7 @@ class RebalancePortfolio:
             currency_upper = currency.upper()
             log.info(f"Processing {currency_upper}...")
             
-            # Get TA data
-            ta_df = self._read_ta_data(currency_upper)
-            if ta_df is None or ta_df.empty:
-                log.warning(f"Skipping {currency_upper} - no TA data")
-                continue
-            
-            # Get last row for TA score calculation
-            last_row = ta_df.iloc[-1]
-            ta_score = self._calculate_ta_score(last_row)
-            
-            # Get portfolio info
+            # Get portfolio info first
             portfolio_row = portfolio_df[portfolio_df['currency'] == currency_upper]
             if portfolio_row.empty:
                 log.warning(f"Currency {currency_upper} not found in portfolio summary")
@@ -245,57 +237,77 @@ class RebalancePortfolio:
                 log.error(f"Error parsing portfolio data for {currency_upper}: {e}")
                 continue
             
-            # Generate signal
-            signal = self._generate_signal(
+            # Skip TA if no holdings
+            if current_value_usdc == 0:
+                log.info(f"{currency_upper}: No holdings, skipping TA calculation")
+                continue
+            
+            # Get TA data
+            ta_df = self._read_ta_data(currency_upper)
+            if ta_df is None or ta_df.empty:
+                log.warning(f"Skipping {currency_upper} - no TA data")
+                continue
+            
+            # Get last row for TA score calculation
+            last_row = ta_df.iloc[-1]
+            ta_score = self._calculate_ta_score(last_row)
+            
+            # Generate signal with priority
+            signal, priority = self._generate_signal(
                 currency_upper, ta_score, current_value_usdc, percentage_change
             )
             
             # Create recommendation
             recommendation = {
                 'currency': currency_upper,
-                'ta_score': ta_score,
-                'current_value_usdc': f"{current_value_usdc:.8f}",
                 'percentage_change': f"{percentage_change:.2f}",
-                'signal': signal
+                'ta_score': ta_score,
+                'signal': signal,
+                'priority': priority,
+                'abs_ta_score': abs(ta_score)
             }
             
             recommendations.append(recommendation)
             log.info(f"{currency_upper}: TA score={ta_score}, value={current_value_usdc:.2f} USDC, "
-                    f"change={percentage_change:.2f}%, signal={signal}")
+                    f"change={percentage_change:.2f}%, signal={signal}, priority={priority}")
         
         return recommendations
 
     def _select_final_recommendations(self, recommendations: List[Dict]) -> List[Dict]:
         """
-        Select final recommendations according to rules:
-        - Max 1 BUY (highest TA score, first if tie)
-        - Multiple SELL allowed
+        Select and sort final recommendations according to rules:
+        - Multiple BUYs allowed
+        - Multiple SELLs allowed
+        - Sort by priority: Step 2 (10% rule) > TA-based
+        - Within same priority, sort by absolute TA score (highest first)
+        - Within same absolute score, keep original order
         
         Args:
             recommendations: List of all recommendations
         
         Returns:
-            Filtered list of recommendations
+            Sorted list of recommendations (excluding HOLD)
         """
-        buy_recommendations = [r for r in recommendations if r['signal'] == 'BUY']
-        sell_recommendations = [r for r in recommendations if r['signal'] == 'SELL']
+        # Filter out HOLD signals
+        active_recommendations = [r for r in recommendations if r['signal'] != 'HOLD']
         
-        final_recommendations = []
+        if not active_recommendations:
+            return []
         
-        # Select max 1 BUY (highest score, first if tie)
-        if buy_recommendations:
-            # Sort by TA score (descending), then keep original order for ties
-            buy_recommendations.sort(key=lambda x: x['ta_score'], reverse=True)
-            selected_buy = buy_recommendations[0]
-            final_recommendations.append(selected_buy)
-            log.info(f"Selected BUY: {selected_buy['currency']} with TA score {selected_buy['ta_score']}")
+        # Sort by:
+        # 1. Priority (ascending: 1=Step 2 comes first, 2=TA-based)
+        # 2. Absolute TA score (descending: highest first)
+        # 3. Keep stable sort for original order on ties
+        active_recommendations.sort(
+            key=lambda x: (x['priority'], -x['abs_ta_score'])
+        )
         
-        # Add all SELL recommendations
-        final_recommendations.extend(sell_recommendations)
-        for sell_rec in sell_recommendations:
-            log.info(f"Selected SELL: {sell_rec['currency']} with TA score {sell_rec['ta_score']}")
+        log.info(f"Selected {len(active_recommendations)} recommendations after filtering HOLD signals")
+        for rec in active_recommendations:
+            log.info(f"  {rec['signal']}: {rec['currency']} "
+                    f"(priority={rec['priority']}, abs_ta_score={rec['abs_ta_score']}, ta_score={rec['ta_score']})")
         
-        return final_recommendations
+        return active_recommendations
 
     def save_recommendations(self, recommendations: List[Dict]) -> bool:
         """
@@ -315,19 +327,28 @@ class RebalancePortfolio:
                 log.warning("No recommendations to save")
                 # Create empty file with headers
                 with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                    fieldnames = ['currency', 'ta_score', 'current_value_usdc', 
-                                'percentage_change', 'signal']
+                    fieldnames = ['currency', 'percentage_change', 'ta_score', 'signal']
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                 log.info(f"Created empty recommendations file: {output_file}")
                 return True
             
+            # Remove internal fields before saving
+            output_recommendations = []
+            for rec in recommendations:
+                output_rec = {
+                    'currency': rec['currency'],
+                    'percentage_change': rec['percentage_change'],
+                    'ta_score': rec['ta_score'],
+                    'signal': rec['signal']
+                }
+                output_recommendations.append(output_rec)
+            
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                fieldnames = ['currency', 'ta_score', 'current_value_usdc', 
-                            'percentage_change', 'signal']
+                fieldnames = ['currency', 'percentage_change', 'ta_score', 'signal']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(recommendations)
+                writer.writerows(output_recommendations)
             
             log.info(f"Saved {len(recommendations)} recommendations to: {output_file}")
             return True
@@ -353,7 +374,7 @@ class RebalancePortfolio:
                 log.warning("No recommendations generated")
                 return self.save_recommendations([])
             
-            # Select final recommendations (max 1 BUY, multiple SELL)
+            # Select and sort final recommendations
             final_recommendations = self._select_final_recommendations(all_recommendations)
             
             # Save to file
