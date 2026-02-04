@@ -67,6 +67,13 @@ class CCXTBroker:
         
         Returns:
             Current price
+        
+        Note:
+            Price priority order: last > close > bid > ask
+            - 'last': Most recent trade price (preferred for market orders)
+            - 'close': Last candle close price (used if no recent trade)
+            - 'bid': Current highest buy order (fallback)
+            - 'ask': Current lowest sell order (final fallback)
         """
         try:
             ticker = self.exchange.fetch_ticker(symbol)
@@ -218,14 +225,20 @@ class ExecuteTradePlan:
         
         Returns:
             True if successful, False otherwise
+        
+        Note:
+            Currently assumes USDC as the quote currency for all trades.
+            This is consistent with the trade_plan.csv format which uses value_usdc.
+            If support for other quote currencies is needed (e.g., USDT), the trade_plan
+            CSV format should be extended to include a 'quote_currency' column.
         """
         action = trade['action']
         currency = trade['currency']
         amount = trade['amount']
         value_usdc = float(trade['value_usdc'])
         
-        # Construct symbol (e.g., BTC/USDC)
-        # Assuming USDC as quote currency (most common in the codebase)
+        # Construct symbol using USDC as quote currency
+        # This matches the trade plan CSV format which uses 'value_usdc' column
         symbol = f"{currency}/USDC"
         
         try:

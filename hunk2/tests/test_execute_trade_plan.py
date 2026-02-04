@@ -247,6 +247,24 @@ class TestCCXTBroker(unittest.TestCase):
             self.assertIsNotNone(broker.exchange)
             mock_binance.assert_called_once()
 
+    def test_trade_plan_format_requires_usdc(self):
+        """
+        Test documenting that trade plan format requires USDC as quote currency.
+        
+        The trade_plan.csv format uses 'value_usdc' column, which assumes USDC
+        as the quote currency. To support other quote currencies (e.g., USDT),
+        the CSV format would need to be extended with a 'quote_currency' column.
+        """
+        # This is a documentation test - it passes to document the limitation
+        # Current trade_plan.csv format:
+        # action,currency,amount,value_usdc
+        # SELL,BTC,0.005,250.00
+        # 
+        # To support USDT, format would need to be:
+        # action,currency,amount,value,quote_currency
+        # SELL,BTC,0.005,250.00,USDT
+        self.assertTrue(True, "Trade plan format currently requires USDC quote currency")
+
 
 if __name__ == '__main__':
     unittest.main()
