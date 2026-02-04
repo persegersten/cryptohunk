@@ -12,8 +12,8 @@ This module:
    - Close > EMA_200: +1, Close < EMA_200: -1
 4. Generates signals: score >= 1 = BUY, score <= -1 = SELL
 5. Applies override rules:
-   - Step 2: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
-   - Step 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Step 2 applies)
+   - Rule 1: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
+   - Rule 2: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
 6. TA is only calculated if currency has holdings (current_value_usdc > 0)
 7. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
 8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
@@ -163,8 +163,8 @@ class RebalancePortfolio:
         Generate BUY/SELL/HOLD signal based on TA score and portfolio rules.
         
         Rules:
-        - Step 2: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
-        - Step 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
+        - Rule 1: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
+        - Rule 2: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
         - Otherwise: TA-based signals (score >= 1: BUY, score <= -1: SELL)
         
         Args:
@@ -176,20 +176,20 @@ class RebalancePortfolio:
         Returns:
             Tuple of (signal, priority) where:
             - signal: "BUY", "SELL", or "HOLD"
-            - priority: 1 for Step 2 (10% rule with small holdings), 2 for TA-based
+            - priority: 1 for Rule 1 (10% rule with small holdings), 2 for TA-based
         """
         trade_threshold = self.cfg.trade_threshold
         
         # Check if holdings are below threshold
         if current_value_usdc < trade_threshold:
-            # Step 2: If profit > 10%, force SELL even with small holdings (highest priority)
+            # Rule 1: If profit > 10%, force SELL even with small holdings (highest priority)
             if percentage_change > 10.0:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > 10% -> SELL (Step 2 priority)")
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > 10% -> SELL (Rule 1 priority)")
                 return "SELL", 1
             
-            # Step 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
+            # Rule 2: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
             if ta_score <= -1:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Step 3, despite TA score {ta_score})")
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 2, despite TA score {ta_score})")
                 return "HOLD", 2
         
         # TA-based signals for normal cases
@@ -278,7 +278,7 @@ class RebalancePortfolio:
         Select and sort final recommendations according to rules:
         - Multiple BUYs allowed
         - Multiple SELLs allowed
-        - Sort by priority: Step 2 (10% rule) > TA-based
+        - Sort by priority: Rule 1 (10% rule) > TA-based
         - Within same priority, sort by absolute TA score (highest first)
         - Within same absolute score, keep original order
         
@@ -295,7 +295,7 @@ class RebalancePortfolio:
             return []
         
         # Sort by:
-        # 1. Priority (ascending: 1=Step 2 comes first, 2=TA-based)
+        # 1. Priority (ascending: 1=Rule 1 comes first, 2=TA-based)
         # 2. Absolute TA score (descending: highest first)
         # 3. Keep stable sort for original order on ties
         active_recommendations.sort(

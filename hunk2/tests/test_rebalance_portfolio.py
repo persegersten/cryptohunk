@@ -7,8 +7,8 @@ These tests validate that the portfolio rebalancing logic works correctly:
 - Signal generation based on TA scores and portfolio rules
 - Multiple BUY recommendations allowed
 - Multiple SELL recommendations
-- Step 2: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (overrides TA)
-- Step 3: holdings < TRADE_THRESHOLD -> no SELL (unless Step 2 applies)
+- Rule 1: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (overrides TA)
+- Rule 2: holdings < TRADE_THRESHOLD -> no SELL (unless Rule 1 applies)
 - Skip TA if no holdings
 - Priority-based sorting
 """
@@ -203,7 +203,7 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(priority, 2)  # TA-based priority
 
     def test_override_sell_with_profit_above_10_percent(self):
-        """Test Step 2: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (highest priority)."""
+        """Test Rule 1: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (highest priority)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings < 100 USDC (TRADE_THRESHOLD) AND profit > 10%
@@ -214,11 +214,11 @@ class TestRebalancePortfolio(unittest.TestCase):
             percentage_change=15.0    # > 10% profit
         )
         
-        self.assertEqual(signal, "SELL")  # Should force SELL (Step 2)
-        self.assertEqual(priority, 1)  # Step 2 has highest priority
+        self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
+        self.assertEqual(priority, 1)  # Rule 1 has highest priority
 
     def test_no_sell_below_threshold(self):
-        """Test Step 3: holdings < TRADE_THRESHOLD -> no SELL (even if TA says sell)."""
+        """Test Rule 2: holdings < TRADE_THRESHOLD -> no SELL (even if TA says sell)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings < 100 USDC and profit < 10%
@@ -229,7 +229,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             percentage_change=5.0     # < 10% profit
         )
         
-        self.assertEqual(signal, "HOLD")  # Should prevent SELL (Step 3)
+        self.assertEqual(signal, "HOLD")  # Should prevent SELL (Rule 2)
         self.assertEqual(priority, 2)  # TA-based priority
 
     def test_sell_allowed_above_threshold(self):
@@ -279,14 +279,14 @@ class TestRebalancePortfolio(unittest.TestCase):
             {'currency': 'BTC', 'ta_score': 2, 'signal': 'BUY',
              'percentage_change': '5.00', 'priority': 2, 'abs_ta_score': 2},
             {'currency': 'ETH', 'ta_score': -3, 'signal': 'SELL',
-             'percentage_change': '12.00', 'priority': 1, 'abs_ta_score': 3},  # Step 2 priority
+             'percentage_change': '12.00', 'priority': 1, 'abs_ta_score': 3},  # Rule 1 priority
             {'currency': 'SOL', 'ta_score': -2, 'signal': 'SELL',
              'percentage_change': '-5.00', 'priority': 2, 'abs_ta_score': 2},  # TA-based
         ]
         
         final = rebalancer._select_final_recommendations(recommendations)
         
-        # ETH should come first (priority 1 - Step 2), then BTC and SOL by abs_ta_score
+        # ETH should come first (priority 1 - Rule 1), then BTC and SOL by abs_ta_score
         self.assertEqual(len(final), 3)
         self.assertEqual(final[0]['currency'], 'ETH')  # Priority 1
         self.assertEqual(final[0]['priority'], 1)
