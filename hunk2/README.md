@@ -9,6 +9,8 @@ Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/sr
 5. **summarize_portfolio** - Skapar sammanställning av portfolio med värden och förändringar
 6. **technical_analysis** - Beräknar tekniska indikatorer (RSI, EMA, MACD) på kurshistorik
 7. **rebalance_portfolio** - Genererar köp/säljrekommendationer baserat på TA-signaler och innehav
+8. **create_trade_plan** - Skapar handelsplan baserat på portfölj och rekommendationer
+9. **execute_trade_plan** - Utför handel mot Binance enligt handelsplan
 
 ## Ny funktionalitet: Technical Analysis
 
@@ -137,6 +139,94 @@ CSV-format (output):
 ```bash
 # Kör rebalansering (kräver att TA och portfolio summary körts först)
 python3 -m hunk2.src.main --rebalance-portfolio
+```
+
+## Funktionalitet: Trade Plan Creation
+
+Modulen `create_trade_plan` genererar en handelsplan baserat på portfölj och rebalanserings-rekommendationer:
+
+**Steg:**
+1. Läser portfölj från `DATA_AREA_ROOT_DIR/summarised/portfolio.csv`
+2. Läser rekommendationer från `DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv`
+3. Processar SELL-rekommendationer först: säljer hela innehavet om värde > TRADE_THRESHOLD
+4. Beräknar tillgängliga medel efter försäljningar
+5. Processar BUY-rekommendationer: köper EN valuta med alla tillgängliga medel om > TRADE_THRESHOLD
+
+**Output:** `DATA_AREA_ROOT_DIR/output/rebalance/trade_plan.csv`
+
+CSV-format (output):
+- action: BUY eller SELL
+- currency: Valutasymbol
+- amount: Kvantitet (eller 'ALL' för BUY)
+- value_usdc: Värde i USDC
+
+**Körning:**
+```bash
+# Skapa handelsplan
+python3 -m hunk2.src.main --create-trade-plan
+```
+
+## Funktionalitet: Trade Execution
+
+Modulen `execute_trade_plan` utför handel mot Binance enligt handelplanen:
+
+**Funktioner:**
+1. Läser handelsplan från `DATA_AREA_ROOT_DIR/output/rebalance/trade_plan.csv`
+2. Validerar börsinformation från `BINANCE_BASE_URL/BINANCE_EXCHANGE_INFO_ENDPOINT`
+3. Om `DRY_RUN=true`: loggar affärer utan att utföra dem (för testning)
+4. Om `DRY_RUN=false`: använder CCXTBroker för att lägga köp/sälj-order på Binance
+
+**Autentisering:**
+- Använder `BINANCE_KEY` och `BINANCE_SECRET` från miljövariabler
+
+**Säkerhet:**
+- Stöder DRY_RUN-läge för säker testning
+- Validerar börsinformation innan handel
+- Detaljerad loggning av alla operationer
+
+**Begränsningar:**
+- Använder USDC som quote-valuta för alla handelspar
+- Lägger market-ordrar (ej limit-ordrar)
+
+**Körning:**
+```bash
+# Testläge (ingen riktig handel)
+export DRY_RUN="true"
+python3 -m hunk2.src.main --execute-trades
+
+# Riktiga affärer (var försiktig!)
+export DRY_RUN="false"
+python3 -m hunk2.src.main --execute-trades
+```
+
+## Fullständigt Workflow
+
+```bash
+# 1. Sätt miljövariabler
+export CURRENCIES="BTC,ETH,SOL"
+export BINANCE_KEY="din_key"
+export BINANCE_SECRET="din_secret"
+export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
+export DATA_AREA_ROOT_DIR="/path/to/data"
+export CURRENCY_HISTORY_PERIOD="1h"
+export CURRENCY_HISTORY_NOF_ELEMENTS="300"
+export TRADE_THRESHOLD="100.0"
+export DRY_RUN="true"
+
+# 2. Samla data
+python3 -m hunk2.src.main --collect-data
+
+# 3. Kör teknisk analys
+python3 -m hunk2.src.main --run-ta
+
+# 4. Generera rekommendationer
+python3 -m hunk2.src.main --rebalance-portfolio
+
+# 5. Skapa handelsplan
+python3 -m hunk2.src.main --create-trade-plan
+
+# 6. Utför handel (DRY_RUN=true för test)
+python3 -m hunk2.src.main --execute-trades
 ```
 
 ## Tester
