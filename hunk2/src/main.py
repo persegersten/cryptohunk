@@ -14,6 +14,7 @@ from .validate_collected_data import validate_collected_data
 from .summarize_portfolio import summarize_portfolio_main
 from .technical_analysis import technical_analysis_main
 from .rebalance_portfolio import rebalance_portfolio_main
+from .create_trade_plan import create_trade_plan_main
 
 
 def main():
@@ -42,6 +43,11 @@ def main():
         "--rebalance-portfolio",
         action="store_true",
         help="Generera köp/säljrekommendationer baserat på TA-signaler och innehav",
+    )
+    parser.add_argument(
+        "--create-trade-plan",
+        action="store_true",
+        help="Skapa handelsplan baserat på portfölj och rekommendationer",
     )
     args = parser.parse_args()
 
@@ -88,6 +94,10 @@ def main():
     if args.rebalance_portfolio:
         print("Startar rebalansering av portfölj (RebalancePortfolio)...")
         rebalance_portfolio_main(cfg)
+
+    if args.create_trade_plan:
+        print("Skapar handelsplan (CreateTradePlan)...")
+        create_trade_plan_main(cfg)
 
     print("\nKlar.")
 
