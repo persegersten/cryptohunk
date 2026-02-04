@@ -15,6 +15,7 @@ from .summarize_portfolio import summarize_portfolio_main
 from .technical_analysis import technical_analysis_main
 from .rebalance_portfolio import rebalance_portfolio_main
 from .create_trade_plan import create_trade_plan_main
+from .execute_trade_plan import execute_trade_plan_main
 
 
 def main():
@@ -48,6 +49,11 @@ def main():
         "--create-trade-plan",
         action="store_true",
         help="Skapa handelsplan baserat på portfölj och rekommendationer",
+    )
+    parser.add_argument(
+        "--execute-trades",
+        action="store_true",
+        help="Utför handel mot Binance enligt handelsplan",
     )
     args = parser.parse_args()
 
@@ -98,6 +104,10 @@ def main():
     if args.create_trade_plan:
         print("Skapar handelsplan (CreateTradePlan)...")
         create_trade_plan_main(cfg)
+
+    if args.execute_trades:
+        print("Utför handel (ExecuteTradePlan)...")
+        execute_trade_plan_main(cfg)
 
     print("\nKlar.")
 
