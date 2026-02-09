@@ -174,7 +174,10 @@ def summarize_portfolio(cfg: Config) -> None:
     # Prepare summary data
     summary_rows = []
     
-    for currency in cfg.currencies:
+    # Process all currencies including quote assets (e.g., USDC, USDT)
+    all_currencies = list(cfg.currencies) + list(cfg.allowed_quote_assets)
+    
+    for currency in all_currencies:
         currency_upper = currency.upper()
         log.info(f"Processing {currency_upper}...")
         
