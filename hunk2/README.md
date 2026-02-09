@@ -1,5 +1,25 @@
 Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/src/`.
 
+## Miljövariabler
+
+Systemet konfigureras via miljövariabler. Se `hunk2/src/assert_env.py` för fullständig lista.
+
+**Obligatoriska:**
+- `CURRENCIES` - Kommaseparerad lista av valutor (ex: "BTC,ETH,SOL")
+- `BINANCE_KEY` - Binance API-nyckel
+- `BINANCE_SECRET` - Binance API-hemlighet
+- `BINANCE_TRADING_URL` - Binance trading URL
+- `DATA_AREA_ROOT_DIR` - Sökväg till dataområde
+- `CURRENCY_HISTORY_PERIOD` - Historikperiod (ex: "1h")
+- `CURRENCY_HISTORY_NOF_ELEMENTS` - Antal historiska datapunkter
+- `TRADE_THRESHOLD` - Minsta värde för handel (i USDC)
+
+**Valfria (med standardvärden):**
+- `TAKE_PROFIT_PERCENTAGE` - Vinst-gräns för automatisk försäljning (standard: 10.0%)
+- `STOP_LOSS_PERCENTAGE` - Förlust-gräns för automatisk försäljning (standard: 6.0%)
+- `QUOTE_ASSETS` - Quote-valutor för trades (standard: "USDT,USDC")
+- `DRY_RUN` - Testläge utan riktiga affärer (standard: false)
+
 ## Moduler
 
 1. **assert_env** - Validerar miljövariabler och skapar Config-objekt
@@ -82,6 +102,8 @@ export DATA_AREA_ROOT_DIR="/home/perseg/dev/cryptotrader/tmp/cryptohunk_data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="100"
 export TRADE_THRESHOLD="0.02"
+export TAKE_PROFIT_PERCENTAGE="10.0"  # Valfritt, standard: 10.0%
+export STOP_LOSS_PERCENTAGE="6.0"     # Valfritt, standard: 6.0%
 export DRY_RUN="true"
 
 # Kör data collection
@@ -112,11 +134,19 @@ Modulen `rebalance_portfolio` genererar köp/säljrekommendationer baserat på t
 - Poäng >= 1: BUY-signal
 - Poäng <= -1: SELL-signal
 
-**Steg 2: Override-regel**
-Om innehav < TRADE_THRESHOLD (i USDC) OCH vinst > 10%: SELL (trumfar TA)
+**Steg 2: Portföljregler med prioritering**
 
-**Steg 3: Skyddsregel**
-Om innehav < TRADE_THRESHOLD: ingen SELL tillåts (förutom override i steg 2)
+**Regel 1 (högsta prioritet):** Ta vinst på små innehav
+- Om innehav < TRADE_THRESHOLD OCH vinst > TAKE_PROFIT_PERCENTAGE: SELL
+- Standard: 10% vinst, konfigurerbar via TAKE_PROFIT_PERCENTAGE
+
+**Regel 2 (hög prioritet):** Stop loss för större innehav
+- Om innehav >= TRADE_THRESHOLD OCH förlust > STOP_LOSS_PERCENTAGE: SELL
+- Standard: 6% förlust, konfigurerbar via STOP_LOSS_PERCENTAGE
+- Trumfar TA-signaler och skyddar mot stora förluster
+
+**Regel 3:** Skyddsregel för små innehav
+- Om innehav < TRADE_THRESHOLD: ingen SELL tillåts (förutom Regel 1)
 
 **Urvalsregler:**
 - Max 1 BUY tillåts (välj högst TA-poäng, första vid lika)
@@ -211,6 +241,8 @@ export DATA_AREA_ROOT_DIR="/path/to/data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="300"
 export TRADE_THRESHOLD="100.0"
+export TAKE_PROFIT_PERCENTAGE="10.0"  # Valfritt, ta vinst vid 10% uppgång
+export STOP_LOSS_PERCENTAGE="6.0"     # Valfritt, sälj vid 6% nedgång
 export DRY_RUN="true"
 
 # 2. Samla data
