@@ -346,7 +346,6 @@ def execute_trade_plan_main(cfg: Config) -> None:
     Called from main.py when --execute-trades flag is set.
     Raises SystemExit(1) on failure.
     """
-    log.info("=== Starting ExecuteTradePlan ===")
     executor = ExecuteTradePlan(cfg)
     success = executor.run()
     if not success:
