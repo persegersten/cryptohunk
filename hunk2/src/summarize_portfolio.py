@@ -175,7 +175,8 @@ def summarize_portfolio(cfg: Config) -> None:
     summary_rows = []
     
     # Process all currencies including quote assets (e.g., USDC, USDT)
-    all_currencies = list(cfg.currencies) + list(cfg.allowed_quote_assets)
+    # Use set to avoid duplicates if a currency appears in both lists
+    all_currencies = list(set(list(cfg.currencies) + list(cfg.allowed_quote_assets)))
     
     for currency in all_currencies:
         currency_upper = currency.upper()
