@@ -55,6 +55,8 @@ class TestCreateTradePlan(unittest.TestCase):
             currency_history_period="1h",
             currency_history_nof_elements=300,
             trade_threshold=100.0,  # 100 USDC threshold
+            take_profit_percentage=10.0,  # 10% take profit
+            stop_loss_percentage=6.0,  # 6% stop loss
             allowed_quote_assets=["USDT"],
             raw_env={}
         )
