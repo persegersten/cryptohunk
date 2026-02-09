@@ -523,10 +523,10 @@ class TestRebalancePortfolio(unittest.TestCase):
             currency="BTC",
             ta_score=2,  # Bullish TA (would normally BUY)
             current_value_usdc=50.0,  # < 100 USDC threshold
-            percentage_change=-6.0    # exactly at 6% loss
+            percentage_change=-6.0    # exactly at -6% loss
         )
         
-        # At exactly -6%, should NOT trigger stop loss (< -6% means more negative)
+        # At exactly -6%, should NOT trigger stop loss (need < -6%, i.e., -6.1%, -7%, etc.)
         self.assertEqual(signal, "BUY")  # Should follow TA
         self.assertEqual(priority, 3)
 
