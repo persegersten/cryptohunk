@@ -69,6 +69,8 @@ CSV-format:
 
 Ny miljövariabel:
 - QUOTE_ASSETS — kommaseparerad lista med vilka quote-valutor som ska användas när trades hämtas (default: "USDT,USDC")
+- TAKE_PROFIT_THRESHOLD — tröskelvärde för take profit i procent (default: 10.0)
+- STOP_LOSS_THRESHOLD — tröskelvärde för stop loss i procent (default: 6.0)
 
 ## Exempel (bash)
 
@@ -82,6 +84,8 @@ export DATA_AREA_ROOT_DIR="/home/perseg/dev/cryptotrader/tmp/cryptohunk_data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="100"
 export TRADE_THRESHOLD="0.02"
+export TAKE_PROFIT_THRESHOLD="10.0"  # Sälj om vinst överstiger 10%
+export STOP_LOSS_THRESHOLD="6.0"     # Sälj om förlust överstiger 6%
 export DRY_RUN="true"
 
 # Kör data collection
@@ -112,8 +116,9 @@ Modulen `rebalance_portfolio` genererar köp/säljrekommendationer baserat på t
 - Poäng >= 1: BUY-signal
 - Poäng <= -1: SELL-signal
 
-**Steg 2: Override-regel**
-Om innehav < TRADE_THRESHOLD (i USDC) OCH vinst > 10%: SELL (trumfar TA)
+**Steg 2: Override-regler**
+- Regel 1: Om innehav < TRADE_THRESHOLD (i USDC) OCH vinst > TAKE_PROFIT_THRESHOLD: SELL (högsta prioritet, trumfar TA)
+- Regel 2: Om innehav < TRADE_THRESHOLD (i USDC) OCH förlust > STOP_LOSS_THRESHOLD: SELL (andra prioritet, trumfar TA)
 
 **Steg 3: Skyddsregel**
 Om innehav < TRADE_THRESHOLD: ingen SELL tillåts (förutom override i steg 2)
@@ -211,6 +216,8 @@ export DATA_AREA_ROOT_DIR="/path/to/data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="300"
 export TRADE_THRESHOLD="100.0"
+export TAKE_PROFIT_THRESHOLD="10.0"  # Sälj om vinst överstiger 10%
+export STOP_LOSS_THRESHOLD="6.0"     # Sälj om förlust överstiger 6%
 export DRY_RUN="true"
 
 # 2. Samla data
