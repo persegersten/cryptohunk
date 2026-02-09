@@ -94,6 +94,17 @@ def load_config_from_env() -> Config:
     except ValueError:
         raise EnvironmentError("TRADE_THRESHOLD måste vara ett tal (float).")
 
+    # Parse take profit and stop loss thresholds (optional with defaults)
+    try:
+        take_profit_threshold = float(env.get("TAKE_PROFIT_THRESHOLD", "10.0"))
+    except ValueError:
+        raise EnvironmentError("TAKE_PROFIT_THRESHOLD måste vara ett tal (float).")
+
+    try:
+        stop_loss_threshold = float(env.get("STOP_LOSS_THRESHOLD", "6.0"))
+    except ValueError:
+        raise EnvironmentError("STOP_LOSS_THRESHOLD måste vara ett tal (float).")
+
     dry_run = _parse_bool(env.get("DRY_RUN", "false"))
 
     binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
@@ -129,6 +140,8 @@ def load_config_from_env() -> Config:
         currency_history_nof_elements=currency_history_nof_elements,
         trade_threshold=trade_threshold,
         allowed_quote_assets=allowed_quote_assets,
+        take_profit_threshold=take_profit_threshold,
+        stop_loss_threshold=stop_loss_threshold,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
 
@@ -150,6 +163,8 @@ def assert_env_and_report() -> Config:
     print(f" - currency_history_period: {cfg.currency_history_period}")
     print(f" - currency_history_nof_elements: {cfg.currency_history_nof_elements}")
     print(f" - trade_threshold: {cfg.trade_threshold}")
+    print(f" - take_profit_threshold: {cfg.take_profit_threshold}")
+    print(f" - stop_loss_threshold: {cfg.stop_loss_threshold}")
     print(f" - dry_run: {cfg.dry_run}")
     print(f" - allowed quote assets: {', '.join(cfg.allowed_quote_assets)}")
 
