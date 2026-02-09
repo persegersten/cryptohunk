@@ -14,7 +14,7 @@ This module:
 5. Applies override rules:
    - Rule 1: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
    - Rule 2: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
-6. TA is only calculated if currency has holdings (current_value_usdc > 0)
+6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
 7. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
 8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 """
@@ -237,12 +237,7 @@ class RebalancePortfolio:
                 log.error(f"Error parsing portfolio data for {currency_upper}: {e}")
                 continue
             
-            # Skip TA if no holdings
-            if current_value_usdc == 0:
-                log.info(f"{currency_upper}: No holdings, skipping TA calculation")
-                continue
-            
-            # Get TA data
+            # Get TA data (process even if no holdings to enable future BUY signals)
             ta_df = self._read_ta_data(currency_upper)
             if ta_df is None or ta_df.empty:
                 log.warning(f"Skipping {currency_upper} - no TA data")
