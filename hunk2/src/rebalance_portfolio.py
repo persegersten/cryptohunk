@@ -403,7 +403,6 @@ def rebalance_portfolio_main(cfg: Config) -> None:
     Called from main.py when --rebalance-portfolio flag is set.
     Raises SystemExit(1) on failure.
     """
-    log.info("=== Starting RebalancePortfolio ===")
     rebalancer = RebalancePortfolio(cfg)
     success = rebalancer.run()
     if not success:

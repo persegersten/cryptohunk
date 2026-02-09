@@ -254,7 +254,6 @@ def create_trade_plan_main(cfg: Config) -> None:
     Called from main.py when --create-trade-plan flag is set.
     Raises SystemExit(1) on failure.
     """
-    log.info("=== Starting CreateTradePlan ===")
     creator = CreateTradePlan(cfg)
     success = creator.run()
     if not success:
