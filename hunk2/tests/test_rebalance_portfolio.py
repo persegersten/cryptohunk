@@ -9,7 +9,7 @@ These tests validate that the portfolio rebalancing logic works correctly:
 - Multiple SELL recommendations
 - Rule 1: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (overrides TA)
 - Rule 2: holdings < TRADE_THRESHOLD -> no SELL (unless Rule 1 applies)
-- Skip TA if no holdings
+- TA is calculated for all configured currencies, even those without holdings
 - Priority-based sorting
 """
 import unittest
@@ -439,9 +439,9 @@ class TestRebalancePortfolio(unittest.TestCase):
         df = pd.read_csv(output_file)
         self.assertEqual(len(df), 0)  # No recommendations
 
-    def test_skip_ta_if_no_holdings(self):
-        """Test that TA is skipped if currency has no holdings (current_value_usdc = 0)."""
-        # Create TA files (will be ignored for currencies with no holdings)
+    def test_ta_calculated_even_without_holdings(self):
+        """Test that TA is calculated for currencies without holdings to enable future BUY signals."""
+        # Create TA files for both currencies (both should be processed now)
         for currency in ["BTC", "ETH"]:
             self._create_ta_file(
                 currency=currency,
@@ -485,10 +485,16 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Read and verify recommendations
         df = pd.read_csv(output_file)
         
-        # Should have only 1 recommendation for ETH (BTC was skipped due to no holdings)
-        self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]['currency'], 'ETH')
-        self.assertEqual(df.iloc[0]['signal'], 'BUY')
+        # Should have 2 BUY recommendations: both BTC (no holdings) and ETH (with holdings)
+        self.assertEqual(len(df), 2)
+        # ETH should come first (higher abs_ta_score due to more data points)
+        # Both should have BUY signals
+        btc_rec = df[df['currency'] == 'BTC']
+        eth_rec = df[df['currency'] == 'ETH']
+        self.assertEqual(len(btc_rec), 1)
+        self.assertEqual(len(eth_rec), 1)
+        self.assertEqual(btc_rec.iloc[0]['signal'], 'BUY')
+        self.assertEqual(eth_rec.iloc[0]['signal'], 'BUY')
 
 
 if __name__ == "__main__":
