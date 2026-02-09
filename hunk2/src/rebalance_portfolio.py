@@ -12,8 +12,9 @@ This module:
    - Close > EMA_200: +1, Close < EMA_200: -1
 4. Generates signals: score >= 1 = BUY, score <= -1 = SELL
 5. Applies override rules:
-   - Rule 1: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
-   - Rule 2: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
+   - Rule 1: If holdings < TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
+   - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
+   - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
 6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
 7. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
 8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
@@ -163,8 +164,9 @@ class RebalancePortfolio:
         Generate BUY/SELL/HOLD signal based on TA score and portfolio rules.
         
         Rules:
-        - Rule 1: If holdings < TRADE_THRESHOLD AND profit > 10%: SELL (highest priority, overrides TA)
-        - Rule 2: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
+        - Rule 1: If holdings < TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
+        - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
+        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
         - Otherwise: TA-based signals (score >= 1: BUY, score <= -1: SELL)
         
         Args:
@@ -176,29 +178,37 @@ class RebalancePortfolio:
         Returns:
             Tuple of (signal, priority) where:
             - signal: "BUY", "SELL", or "HOLD"
-            - priority: 1 for Rule 1 (10% rule with small holdings), 2 for TA-based
+            - priority: 1 for Rule 1 (take profit with small holdings), 
+                       2 for Rule 2 (stop loss), 3 for TA-based
         """
         trade_threshold = self.cfg.trade_threshold
+        take_profit_pct = self.cfg.take_profit_percentage
+        stop_loss_pct = self.cfg.stop_loss_percentage
         
         # Check if holdings are below threshold
         if current_value_usdc < trade_threshold:
-            # Rule 1: If profit > 10%, force SELL even with small holdings (highest priority)
-            if percentage_change > 10.0:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > 10% -> SELL (Rule 1 priority)")
+            # Rule 1: If profit > take_profit_percentage, force SELL even with small holdings (highest priority)
+            if percentage_change > take_profit_pct:
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD but profit > {take_profit_pct}% -> SELL (Rule 1 priority)")
                 return "SELL", 1
             
-            # Rule 2: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
+            # Rule 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
             if ta_score <= -1:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 2, despite TA score {ta_score})")
-                return "HOLD", 2
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite TA score {ta_score})")
+                return "HOLD", 3
+        else:
+            # Rule 2: If holdings >= TRADE_THRESHOLD and loss > stop_loss_percentage, force SELL (high priority)
+            if percentage_change < -stop_loss_pct:
+                log.info(f"{currency}: Loss > {stop_loss_pct}% -> SELL (Rule 2 stop loss)")
+                return "SELL", 2
         
         # TA-based signals for normal cases
         if ta_score >= 1:
-            return "BUY", 2
+            return "BUY", 3
         elif ta_score <= -1:
-            return "SELL", 2
+            return "SELL", 3
         else:
-            return "HOLD", 2
+            return "HOLD", 3
 
     def generate_recommendations(self) -> List[Dict]:
         """
