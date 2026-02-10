@@ -262,9 +262,17 @@ class TestCCXTBroker(unittest.TestCase):
             )
             
             # Verify that adjustForTimeDifference is set to True
-            call_args = mock_binance.call_args[0][0]
-            self.assertTrue(call_args.get('adjustForTimeDifference'), 
-                          "adjustForTimeDifference should be True to fix timestamp sync issues")
+            mock_binance.assert_called_once()
+            call_args = mock_binance.call_args
+            self.assertIsNotNone(call_args, "ccxt.binance should have been called")
+            
+            # Check if called with positional argument (dict)
+            if call_args[0]:
+                config_dict = call_args[0][0]
+                self.assertTrue(config_dict.get('adjustForTimeDifference'), 
+                              "adjustForTimeDifference should be True to fix timestamp sync issues")
+            else:
+                self.fail("ccxt.binance was not called with expected arguments")
 
     def test_trade_plan_format_requires_usdc(self):
         """
