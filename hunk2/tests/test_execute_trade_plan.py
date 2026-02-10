@@ -248,6 +248,23 @@ class TestCCXTBroker(unittest.TestCase):
             
             self.assertIsNotNone(broker.exchange)
             mock_binance.assert_called_once()
+    
+    def test_ccxt_broker_time_synchronization(self):
+        """Test that CCXTBroker is initialized with time synchronization enabled."""
+        with patch('hunk2.src.execute_trade_plan.ccxt.binance') as mock_binance:
+            mock_exchange = MagicMock()
+            mock_binance.return_value = mock_exchange
+            
+            broker = CCXTBroker(
+                api_key="test_key",
+                api_secret="test_secret",
+                base_url="https://api.binance.com"
+            )
+            
+            # Verify that adjustForTimeDifference is set to True
+            call_args = mock_binance.call_args[0][0]
+            self.assertTrue(call_args.get('adjustForTimeDifference'), 
+                          "adjustForTimeDifference should be True to fix timestamp sync issues")
 
     def test_trade_plan_format_requires_usdc(self):
         """
