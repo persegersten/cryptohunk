@@ -2,8 +2,6 @@
 *.swp
 *.json
 local.sh
-analyse.sh
-run.sh
 portfolio.json
 secrets.json
 history/
