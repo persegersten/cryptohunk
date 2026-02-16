@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CollectData - Datainhämtning för CryptoHunk2.0 (hunk2)
+CollectData - Datainhämtning för CryptoHunk2.0
 
 Denna version innehåller en enkel tids-synk mot Binance (/api/v3/time)
 så att signerade requests får en timestamp i Binance-tid och undviker

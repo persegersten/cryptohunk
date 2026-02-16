@@ -10,8 +10,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hunk2.src.technical_analysis import TechnicalAnalysis
-from hunk2.src.config import Config
+from src.technical_analysis import TechnicalAnalysis
+from src.config import Config
 
 
 def test_integration():

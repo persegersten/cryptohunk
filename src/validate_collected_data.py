@@ -153,7 +153,7 @@ if __name__ == "__main__":
     """
     Kör från kommandoraden. Hämtar env via assert_env_and_report() för att få Config.
     Ex:
-      python3 hunk2/src/validate_collected_data.py
+      python3 src/validate_collected_data.py
     """
     try:
         cfg = assert_env_and_report()

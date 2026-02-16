@@ -1,8 +1,8 @@
-Detta är en basstruktur för CryptoHunk2.0 (hunk2). Källkod ligger i `hunk2/src/`.
+Detta är en basstruktur för CryptoHunk2.0. Källkod ligger i `src/`.
 
 ## Miljövariabler
 
-Systemet konfigureras via miljövariabler. Se `hunk2/src/assert_env.py` för fullständig lista.
+Systemet konfigureras via miljövariabler. Se `src/assert_env.py` för fullständig lista.
 
 **Obligatoriska:**
 - `CURRENCIES` - Kommaseparerad lista av valutor (ex: "BTC,ETH,SOL")
@@ -64,7 +64,7 @@ CSV-format (output):
 **Körning:**
 ```bash
 # Kör teknisk analys på befintlig historik
-python3 -m hunk2.src.main --run-ta
+python3 -m src.main --run-ta
 ```
 
 ## Funktionalitet: Portfolio Summarization
@@ -107,13 +107,13 @@ export STOP_LOSS_PERCENTAGE="6.0"     # Valfritt, standard: 6.0%
 export DRY_RUN="true"
 
 # Kör data collection
-python3 -m hunk2.src.main --collect-data
+python3 -m src.main --collect-data
 
 # Kör teknisk analys
-python3 -m hunk2.src.main --run-ta
+python3 -m src.main --run-ta
 
 # Kör rebalansering av portfölj
-python3 -m hunk2.src.main --rebalance-portfolio
+python3 -m src.main --rebalance-portfolio
 ```
 
 ## Funktionalitet: Portfolio Rebalancing
@@ -168,7 +168,7 @@ CSV-format (output):
 **Körning:**
 ```bash
 # Kör rebalansering (kräver att TA och portfolio summary körts först)
-python3 -m hunk2.src.main --rebalance-portfolio
+python3 -m src.main --rebalance-portfolio
 ```
 
 ## Funktionalitet: Trade Plan Creation
@@ -193,7 +193,7 @@ CSV-format (output):
 **Körning:**
 ```bash
 # Skapa handelsplan
-python3 -m hunk2.src.main --create-trade-plan
+python3 -m src.main --create-trade-plan
 ```
 
 ## Funktionalitet: Trade Execution
@@ -222,11 +222,11 @@ Modulen `execute_trade_plan` utför handel mot Binance enligt handelplanen:
 ```bash
 # Testläge (ingen riktig handel)
 export DRY_RUN="true"
-python3 -m hunk2.src.main --execute-trades
+python3 -m src.main --execute-trades
 
 # Riktiga affärer (var försiktig!)
 export DRY_RUN="false"
-python3 -m hunk2.src.main --execute-trades
+python3 -m src.main --execute-trades
 ```
 
 ## Fullständigt Workflow
@@ -246,25 +246,25 @@ export STOP_LOSS_PERCENTAGE="6.0"     # Valfritt, sälj vid 6% nedgång
 export DRY_RUN="true"
 
 # 2. Samla data
-python3 -m hunk2.src.main --collect-data
+python3 -m src.main --collect-data
 
 # 3. Kör teknisk analys
-python3 -m hunk2.src.main --run-ta
+python3 -m src.main --run-ta
 
 # 4. Generera rekommendationer
-python3 -m hunk2.src.main --rebalance-portfolio
+python3 -m src.main --rebalance-portfolio
 
 # 5. Skapa handelsplan
-python3 -m hunk2.src.main --create-trade-plan
+python3 -m src.main --create-trade-plan
 
 # 6. Utför handel (DRY_RUN=true för test)
-python3 -m hunk2.src.main --execute-trades
+python3 -m src.main --execute-trades
 ```
 
 ## Tester
 
-Tester för modulerna finns i `hunk2/tests/`. Kör tester med:
+Tester för modulerna finns i `tests/`. Kör tester med:
 
 ```bash
-python3 -m unittest discover hunk2/tests
+python3 -m unittest discover tests
 ```

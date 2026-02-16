@@ -18,11 +18,11 @@ import csv
 import sys
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from hunk2.src.create_trade_plan import CreateTradePlan
-from hunk2.src.config import Config
+from src.create_trade_plan import CreateTradePlan
+from src.config import Config
 
 
 class TestCreateTradePlan(unittest.TestCase):

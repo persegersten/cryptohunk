@@ -13,11 +13,11 @@ import sys
 import os
 
 # Lägg till projektets rotmapp till path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from hunk2.src.technical_analysis import TechnicalAnalysis
-from hunk2.src.config import Config
+from src.technical_analysis import TechnicalAnalysis
+from src.config import Config
 
 
 class TestTechnicalAnalysis(unittest.TestCase):

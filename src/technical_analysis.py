@@ -245,7 +245,7 @@ if __name__ == "__main__":
     """
     Kör från kommandoraden. Hämtar env via assert_env_and_report() för att få Config.
     Ex:
-      python3 hunk2/src/technical_analysis.py
+      python3 src/technical_analysis.py
     """
     from .assert_env import assert_env_and_report
     

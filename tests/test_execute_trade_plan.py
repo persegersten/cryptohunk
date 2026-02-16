@@ -17,11 +17,11 @@ import sys
 from unittest.mock import MagicMock, patch, call
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from hunk2.src.execute_trade_plan import ExecuteTradePlan, CCXTBroker
-from hunk2.src.config import Config
+from src.execute_trade_plan import ExecuteTradePlan, CCXTBroker
+from src.config import Config
 
 
 class TestExecuteTradePlan(unittest.TestCase):
@@ -139,7 +139,7 @@ class TestExecuteTradePlan(unittest.TestCase):
         self.cfg.dry_run = False
         
         # Mock CCXTBroker
-        with patch('hunk2.src.execute_trade_plan.CCXTBroker') as MockBroker:
+        with patch('src.execute_trade_plan.CCXTBroker') as MockBroker:
             mock_broker_instance = MagicMock()
             MockBroker.return_value = mock_broker_instance
             
@@ -187,7 +187,7 @@ class TestExecuteTradePlan(unittest.TestCase):
         """Test exchange info validation in live mode."""
         self.cfg.dry_run = False
         
-        with patch('hunk2.src.execute_trade_plan.CCXTBroker') as MockBroker:
+        with patch('src.execute_trade_plan.CCXTBroker') as MockBroker:
             mock_broker_instance = MagicMock()
             MockBroker.return_value = mock_broker_instance
             
@@ -212,7 +212,7 @@ class TestExecuteTradePlan(unittest.TestCase):
         
         self.cfg.dry_run = False
         
-        with patch('hunk2.src.execute_trade_plan.CCXTBroker') as MockBroker:
+        with patch('src.execute_trade_plan.CCXTBroker') as MockBroker:
             mock_broker_instance = MagicMock()
             MockBroker.return_value = mock_broker_instance
             
@@ -236,7 +236,7 @@ class TestCCXTBroker(unittest.TestCase):
     
     def test_ccxt_broker_initialization(self):
         """Test CCXTBroker initialization."""
-        with patch('hunk2.src.execute_trade_plan.ccxt.binance') as mock_binance:
+        with patch('src.execute_trade_plan.ccxt.binance') as mock_binance:
             mock_exchange = MagicMock()
             mock_binance.return_value = mock_exchange
             
@@ -251,7 +251,7 @@ class TestCCXTBroker(unittest.TestCase):
     
     def test_ccxt_broker_time_synchronization(self):
         """Test that CCXTBroker is initialized with time synchronization enabled."""
-        with patch('hunk2.src.execute_trade_plan.ccxt.binance') as mock_binance:
+        with patch('src.execute_trade_plan.ccxt.binance') as mock_binance:
             mock_exchange = MagicMock()
             mock_binance.return_value = mock_exchange
             
