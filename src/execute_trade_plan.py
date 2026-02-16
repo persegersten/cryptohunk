@@ -358,7 +358,7 @@ if __name__ == "__main__":
     """
     Run from command line. Gets env via assert_env_and_report() for Config.
     Example:
-      python3 hunk2/src/execute_trade_plan.py
+      python3 src/execute_trade_plan.py
     """
     from .assert_env import assert_env_and_report
     

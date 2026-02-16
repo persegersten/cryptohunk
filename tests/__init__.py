@@ -1,1 +1,1 @@
-"""Tests for hunk2 modules."""
+"""Tests for cryptohunk modules."""
