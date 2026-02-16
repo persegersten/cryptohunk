@@ -174,6 +174,27 @@ class TestExecuteTradePlan(unittest.TestCase):
         
         self.assertTrue(success)
 
+    def test_run_with_empty_trade_plan_exits_early(self):
+        """Test that run() exits early when trade plan contains 0 trades."""
+        # Create empty trade plan
+        self._create_trade_plan([])
+        
+        # Mock exchange info validation to verify it's NOT called
+        self.cfg.dry_run = False
+        
+        with patch('src.execute_trade_plan.CCXTBroker') as MockBroker:
+            mock_broker_instance = MagicMock()
+            MockBroker.return_value = mock_broker_instance
+            
+            executor = ExecuteTradePlan(self.cfg)
+            success = executor.run()
+            
+            # Should succeed
+            self.assertTrue(success)
+            
+            # Verify exchange info validation was NOT called (early exit)
+            mock_broker_instance.fetch_exchange_info.assert_not_called()
+
     def test_validate_exchange_info_dry_run(self):
         """Test exchange info validation in dry run mode."""
         self.cfg.dry_run = True

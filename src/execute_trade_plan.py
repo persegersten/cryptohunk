@@ -327,6 +327,19 @@ class ExecuteTradePlan:
         log.info("=== Starting ExecuteTradePlan ===")
         
         try:
+            # Read trade plan early to check if there are any trades
+            trades = self._read_trade_plan()
+            if trades is None:
+                log.error("Failed to read trade plan")
+                return False
+            
+            # Exit early if no trades to execute
+            if not trades:
+                log.info("Trade plan is empty (0 trades), exiting early")
+                return True
+            
+            log.info(f"Trade plan contains {len(trades)} trade(s), proceeding with execution")
+            
             success = self.execute_trades()
             
             if success:
