@@ -1,25 +1,6 @@
-# Grundläggande numerik och databehandling
+# Requirements för vidare utveckling (lägg till fler vid behov)
+requests>=2.28
+python-dotenv>=1.0
+ccxt>=2.8.0
 pandas>=2.2.0
-numpy>=1.26.0
-
-# För HTTP-förfrågningar till CoinGecko m.fl.
-requests>=2.31.0
-
-# För tidszonhantering (ZoneInfo finns i Python 3.9+, men pytz används ibland i äldre miljöer)
-pytz>=2024.1
-
-# För datumtolkning i äldre Pandas-versioner (inte strikt nödvändigt men bra fallback)
-python-dateutil>=2.9.0
-
-# CCXT – CryptoCurrency eXchange Trading
-ccxt>=4.5.11
-
-# Binance
-python-binance
-
-# För Fixie Socks proxy
-requests[socks]
-PySocks
-
-# For analysing etc
-matplotlib
+pandas-ta>=0.3.14b
