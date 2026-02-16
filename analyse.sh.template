@@ -3,6 +3,6 @@
 export CCXT_API_KEY= <your key>,
 export CCXT_API_SECRET= <your secret>
 
-python src/analyse/analyse.py --days 30 --save ./output --verbose
+python src/analyse.py --days 30 --save ./output --verbose
 
 
