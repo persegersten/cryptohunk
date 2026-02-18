@@ -5,5 +5,6 @@ __all__ = [
             "config", 
             "main", 
             "validate_collected_data",
-            "summarize_portfolio"
+            "summarize_portfolio",
+            "analyze_trades"
            ]
