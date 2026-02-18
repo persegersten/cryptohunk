@@ -531,6 +531,166 @@ class TestAnalyzeTrades(unittest.TestCase):
         self.assertEqual(analyzer._extract_quote_asset("ADAETH"), "ETH")
         self.assertIsNone(analyzer._extract_quote_asset("UNKNOWNSYMBOL"))
 
+    def test_daily_trades_generation(self):
+        """Test att daily_trades.csv genereras korrekt."""
+        test_trades = [
+            # Köp 1 BTC för 50000 USDT den 2021-01-01
+            {
+                "symbol": "BTCUSDT",
+                "price": "50000.00",
+                "qty": "1.0",
+                "quoteQty": "50000.00",
+                "commission": "0.001",
+                "commissionAsset": "BTC",
+                "time": 1609459200000,  # 2021-01-01
+                "isBuyer": True
+            },
+            # Sälj 1 BTC för 55000 USDT den 2021-01-02
+            {
+                "symbol": "BTCUSDT",
+                "price": "55000.00",
+                "qty": "1.0",
+                "quoteQty": "55000.00",
+                "commission": "55.0",
+                "commissionAsset": "USDT",
+                "time": 1609545600000,  # 2021-01-02
+                "isBuyer": False
+            },
+            # Köp 10 ETH för 3000 USDT den 2021-01-03
+            {
+                "symbol": "ETHUSDT",
+                "price": "3000.00",
+                "qty": "10.0",
+                "quoteQty": "30000.00",
+                "commission": "0.01",
+                "commissionAsset": "ETH",
+                "time": 1609632000000,  # 2021-01-03
+                "isBuyer": True
+            },
+            # Sälj 5 ETH för 3200 USDT den 2021-01-04
+            {
+                "symbol": "ETHUSDT",
+                "price": "3200.00",
+                "qty": "5.0",
+                "quoteQty": "16000.00",
+                "commission": "16.0",
+                "commissionAsset": "USDT",
+                "time": 1609718400000,  # 2021-01-04
+                "isBuyer": False
+            }
+        ]
+        self._create_trades_file(test_trades)
+        
+        analyzer = AnalyzeTrades(self.cfg)
+        trades = analyzer._load_trades()
+        analyzer._generate_daily_trades_summary(trades)
+        
+        # Verifiera att filen skapades
+        output_file = self.data_root / "output" / "trades_analysis" / "daily_trades.csv"
+        self.assertTrue(output_file.exists())
+        
+        # Läs och verifiera innehållet
+        with open(output_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        self.assertEqual(len(rows), 4)
+        
+        # Verifiera första köpet (BTC)
+        btc_buy = rows[0]
+        self.assertEqual(btc_buy['datum'], '2021-01-01')
+        self.assertEqual(btc_buy['valuta'], 'BTC')
+        self.assertEqual(btc_buy['action'], 'BUY')
+        self.assertEqual(Decimal(btc_buy['amount']), Decimal('1.0'))
+        self.assertEqual(Decimal(btc_buy['amount_usdc']), Decimal('50000.00'))
+        self.assertEqual(btc_buy['percent_change'], 'n/a')
+        self.assertEqual(btc_buy['value_change_usdc'], 'n/a')
+        
+        # Verifiera BTC försäljningen
+        btc_sell = rows[1]
+        self.assertEqual(btc_sell['datum'], '2021-01-02')
+        self.assertEqual(btc_sell['valuta'], 'BTC')
+        self.assertEqual(btc_sell['action'], 'SELL')
+        self.assertEqual(Decimal(btc_sell['amount']), Decimal('1.0'))
+        self.assertEqual(Decimal(btc_sell['amount_usdc']), Decimal('55000.00'))
+        # Procent: (55000 - 50000) / 50000 * 100 = 10%
+        self.assertEqual(btc_sell['percent_change'], '10.00%')
+        # Värde: 55000 - 50000 = 5000
+        self.assertEqual(Decimal(btc_sell['value_change_usdc']), Decimal('5000.000'))
+        
+        # Verifiera ETH köpet
+        eth_buy = rows[2]
+        self.assertEqual(eth_buy['datum'], '2021-01-03')
+        self.assertEqual(eth_buy['valuta'], 'ETH')
+        self.assertEqual(eth_buy['action'], 'BUY')
+        
+        # Verifiera ETH försäljningen
+        eth_sell = rows[3]
+        self.assertEqual(eth_sell['datum'], '2021-01-04')
+        self.assertEqual(eth_sell['valuta'], 'ETH')
+        self.assertEqual(eth_sell['action'], 'SELL')
+        self.assertEqual(Decimal(eth_sell['amount']), Decimal('5.0'))
+        # Procent: (3200 - 3000) / 3000 * 100 = 6.67%
+        self.assertEqual(eth_sell['percent_change'], '6.67%')
+        # Värde: 5 * 3200 - 5 * 3000 = 16000 - 15000 = 1000
+        self.assertEqual(Decimal(eth_sell['value_change_usdc']), Decimal('1000.000'))
+
+    def test_daily_trades_with_commission_conversion(self):
+        """Test att provisioner konverteras korrekt till USDC."""
+        test_trades = [
+            {
+                "symbol": "BTCUSDT",
+                "price": "50000.00",
+                "qty": "0.1",
+                "quoteQty": "5000.00",
+                "commission": "0.0001",
+                "commissionAsset": "BTC",  # Commission i BTC ska konverteras
+                "time": 1609459200000,
+                "isBuyer": True
+            }
+        ]
+        self._create_trades_file(test_trades)
+        
+        analyzer = AnalyzeTrades(self.cfg)
+        trades = analyzer._load_trades()
+        analyzer._generate_daily_trades_summary(trades)
+        
+        output_file = self.data_root / "output" / "trades_analysis" / "daily_trades.csv"
+        with open(output_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        
+        # Commission i BTC: 0.0001 * 50000 = 5 USDT
+        self.assertEqual(Decimal(row['commission_usdc']), Decimal('5.00000'))
+
+    def test_full_run_includes_daily_trades(self):
+        """Test att daily_trades.csv skapas vid fullständig körning."""
+        test_trades = [
+            {
+                "symbol": "BTCUSDT",
+                "price": "50000.00",
+                "qty": "1.0",
+                "quoteQty": "50000.00",
+                "commission": "0.001",
+                "commissionAsset": "BTC",
+                "time": 1609459200000,
+                "isBuyer": True
+            }
+        ]
+        self._create_trades_file(test_trades)
+        
+        analyzer = AnalyzeTrades(self.cfg)
+        success = analyzer.run()
+        
+        self.assertTrue(success)
+        
+        # Verifiera att daily_trades.csv skapades
+        output_root = self.data_root / "output" / "trades_analysis"
+        self.assertTrue((output_root / "daily_trades.csv").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

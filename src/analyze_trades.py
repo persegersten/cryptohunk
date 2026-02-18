@@ -8,6 +8,7 @@ This module:
    - trades_summary_by_symbol.csv
    - commission_summary.csv
    - realized_pnl_fifo_by_symbol.csv (optional, when FIFO is possible)
+   - daily_trades.csv (trades grouped by day with USDC values and P&L)
 """
 import logging
 import json
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from decimal import Decimal
+from datetime import datetime
 
 from .config import Config
 
@@ -344,6 +346,167 @@ class AnalyzeTrades:
         
         return None
 
+    def _generate_daily_trades_summary(self, trades: List[Dict[str, Any]]) -> None:
+        """
+        Genererar daily_trades.csv med trades per dag.
+        
+        Kolumner:
+        1. datum (date)
+        2. valuta (currency), BUY/SELL (action)
+        3. amount (quantity), amount_usdc (value in USDC)
+        4. commission_usdc (commission converted to USDC)
+        5. percent_change (för SELL: % förändring från köppris, för BUY: n/a)
+        6. value_change_usdc (för SELL: värdeförändring i USDC, för BUY: n/a)
+        """
+        # Gruppera trades per symbol och sortera efter tid
+        trades_by_symbol = defaultdict(list)
+        for trade in trades:
+            symbol = trade.get('symbol')
+            if symbol:
+                trades_by_symbol[symbol].append(trade)
+        
+        # Sortera trades per symbol baserat på tid
+        for symbol in trades_by_symbol:
+            trades_by_symbol[symbol].sort(key=lambda t: t.get('time', 0))
+        
+        # Bygg FIFO-köer per symbol för att beräkna förändring
+        fifo_queues = {}
+        for symbol in trades_by_symbol:
+            fifo_queues[symbol] = []  # [(qty, price_in_quote)]
+        
+        # Process alla trades och bygg resultat
+        daily_results = []
+        
+        # Sortera alla trades efter tid
+        all_trades_sorted = sorted(trades, key=lambda t: t.get('time', 0))
+        
+        for trade in all_trades_sorted:
+            try:
+                symbol = trade.get('symbol', 'UNKNOWN')
+                is_buyer = trade.get('isBuyer', False)
+                qty = Decimal(str(trade.get('qty', 0)))
+                price = Decimal(str(trade.get('price', 0)))
+                quote_qty = Decimal(str(trade.get('quoteQty', 0)))
+                commission = Decimal(str(trade.get('commission', 0)))
+                commission_asset = trade.get('commissionAsset', 'UNKNOWN')
+                timestamp = trade.get('time', 0)
+                
+                # Konvertera timestamp till datum
+                trade_date = datetime.fromtimestamp(timestamp / 1000).strftime('%Y-%m-%d')
+                
+                # Extrahera valuta och quote asset
+                quote_asset = self._extract_quote_asset(symbol)
+                if quote_asset:
+                    currency = symbol[:-len(quote_asset)]
+                else:
+                    currency = symbol
+                
+                # Konvertera till USDC/USDT (quote asset)
+                # Om quote asset är USDT eller USDC, använd det direkt
+                if quote_asset in ['USDT', 'USDC']:
+                    amount_usdc = quote_qty
+                    price_usdc = price
+                else:
+                    # För andra quote assets, använd quote_qty som approximation
+                    # I praktiken skulle man behöva hämta konverteringskurs
+                    amount_usdc = quote_qty
+                    price_usdc = price
+                
+                # Konvertera commission till USDC
+                if commission_asset in ['USDT', 'USDC']:
+                    commission_usdc = commission
+                elif commission_asset == currency:
+                    # Commission är i base asset, konvertera med trade price
+                    commission_usdc = commission * price_usdc
+                elif commission_asset == quote_asset:
+                    # Commission är i quote asset
+                    commission_usdc = commission
+                else:
+                    # Okänt asset, använd 0 eller approximation
+                    commission_usdc = Decimal('0')
+                
+                action = 'BUY' if is_buyer else 'SELL'
+                
+                # Initialisera percent_change och value_change_usdc
+                percent_change = 'n/a'
+                value_change_usdc = 'n/a'
+                
+                if is_buyer:
+                    # Köp: lägg till i FIFO-kö
+                    fifo_queues[symbol].append((qty, price_usdc))
+                else:
+                    # Sälj: matcha mot äldsta köp och beräkna förändring
+                    remaining_sell_qty = qty
+                    total_buy_cost = Decimal('0')
+                    total_matched_qty = Decimal('0')
+                    
+                    while remaining_sell_qty > 0 and fifo_queues[symbol]:
+                        buy_qty, buy_price = fifo_queues[symbol][0]
+                        
+                        if buy_qty <= remaining_sell_qty:
+                            # Hela köpet matchas
+                            matched_qty = buy_qty
+                            fifo_queues[symbol].pop(0)
+                        else:
+                            # Delvis matchning
+                            matched_qty = remaining_sell_qty
+                            fifo_queues[symbol][0] = (buy_qty - matched_qty, buy_price)
+                        
+                        total_buy_cost += matched_qty * buy_price
+                        total_matched_qty += matched_qty
+                        remaining_sell_qty -= matched_qty
+                    
+                    # Beräkna genomsnittligt köppris och förändring
+                    if total_matched_qty > 0:
+                        avg_buy_price = total_buy_cost / total_matched_qty
+                        sell_value = total_matched_qty * price_usdc
+                        buy_value = total_buy_cost
+                        
+                        # Procent förändring
+                        if avg_buy_price > 0:
+                            percent_change_val = ((price_usdc - avg_buy_price) / avg_buy_price) * 100
+                            percent_change = f"{percent_change_val:.2f}%"
+                        
+                        # Värdeförändring i USDC
+                        value_change_usdc = str(sell_value - buy_value)
+                
+                # Lägg till i resultat
+                daily_results.append({
+                    'datum': trade_date,
+                    'valuta': currency,
+                    'action': action,
+                    'amount': str(qty),
+                    'amount_usdc': str(amount_usdc),
+                    'commission_usdc': str(commission_usdc),
+                    'percent_change': percent_change,
+                    'value_change_usdc': value_change_usdc
+                })
+                
+            except (ValueError, TypeError) as e:
+                log.warning("Felaktig trade vid daglig sammanfattning: %s", e)
+                continue
+        
+        # Skriv CSV
+        output_file = self.output_root / "daily_trades.csv"
+        self._ensure_dir(self.output_root)
+        
+        with open(output_file, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = [
+                'datum',
+                'valuta',
+                'action',
+                'amount',
+                'amount_usdc',
+                'commission_usdc',
+                'percent_change',
+                'value_change_usdc'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(daily_results)
+        
+        log.info("Sparade daily_trades.csv: %s", output_file)
+
     def run(self) -> bool:
         """
         Huvudmetod för att köra trade-analys.
@@ -360,6 +523,7 @@ class AnalyzeTrades:
             self._generate_trades_summary_by_symbol(trades)
             self._generate_commission_summary(trades)
             self._generate_realized_pnl_fifo(trades)
+            self._generate_daily_trades_summary(trades)
             log.info("AnalyzeTrades avslutad framgångsrikt!")
             return True
         except Exception as e:
