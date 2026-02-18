@@ -7,6 +7,7 @@ Automated cryptocurrency trading bot with technical analysis and portfolio rebal
 - Collect market data and portfolio information from Binance
 - Technical analysis (RSI, EMA, MACD indicators)
 - Portfolio summarization with P&L tracking
+- Trade history analysis with daily reports
 - Automated rebalancing recommendations
 - Trade plan creation and execution
 - Dry-run mode for safe testing
@@ -34,6 +35,9 @@ python3 -m src.main --run-ta
 python3 -m src.main --rebalance-portfolio
 python3 -m src.main --create-trade-plan
 python3 -m src.main --execute-trades
+
+# Analyze trade history
+python3 -m src.main --analyze-trades
 ```
 
 ## Configuration
@@ -74,6 +78,28 @@ Calculates indicators on historical price data:
 2. Stop loss on large positions when loss > STOP_LOSS_PERCENTAGE
 3. No selling positions below TRADE_THRESHOLD (except rule 1)
 4. Maximum one BUY per cycle
+
+## Trade Analysis
+
+Analyze your trade history with:
+
+```bash
+python3 -m src.main --analyze-trades
+```
+
+Generates four CSV reports in `DATA_AREA_ROOT_DIR/output/trades_analysis/`:
+
+1. **daily_trades.csv** - Daily trade summary with P&L
+   - Datum, valuta, BUY/SELL
+   - Amount and value in USDC
+   - Commission in USDC
+   - For SELL: percent change and value change from buy price (FIFO)
+
+2. **trades_summary_by_symbol.csv** - Aggregated statistics per trading pair
+
+3. **commission_summary.csv** - Total commissions by asset
+
+4. **realized_pnl_fifo_by_symbol.csv** - FIFO-based profit/loss per symbol
 
 ## Testing
 
