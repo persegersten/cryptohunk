@@ -283,8 +283,12 @@ class AnalyzeTrades:
                 notes.append(f"Unmatched buy: {unmatched_qty}")
 
             # Beräkna genomsnittspriser
-            avg_buy_price = total_buy_cost / matched_sell_qty if matched_sell_qty > 0 else Decimal('0')
-            avg_sell_price = total_sell_revenue / matched_sell_qty if matched_sell_qty > 0 else Decimal('0')
+            if matched_sell_qty > 0:
+                avg_buy_price = total_buy_cost / matched_sell_qty
+                avg_sell_price = total_sell_revenue / matched_sell_qty
+            else:
+                avg_buy_price = Decimal('0')
+                avg_sell_price = Decimal('0')
 
             # Justera PnL om commission är i quote asset
             gross_pnl = realized_pnl
