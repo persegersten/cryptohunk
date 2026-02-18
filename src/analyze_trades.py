@@ -236,7 +236,7 @@ class AnalyzeTrades:
                     commission = Decimal(str(trade.get('commission', 0)))
                     commission_asset = trade.get('commissionAsset', 'UNKNOWN')
 
-                    # Samla alla commisssions
+                    # Samla alla commissions
                     if commission > 0:
                         commissions[commission_asset] += commission
 
