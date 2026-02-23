@@ -147,6 +147,9 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("KÖP", label)
         self.assertIn("BTCUSDT", label)
         self.assertIn("41000.00", label)
+        # Trade-ID and Order-ID should NOT appear in the popup
+        self.assertNotIn("Trade-ID", label)
+        self.assertNotIn("Order-ID", label)
 
     def test_format_trade_label_sell(self):
         trade = {
@@ -159,6 +162,9 @@ class TestVisualizeHistory(unittest.TestCase):
         label = viz._format_trade_label(trade)
         self.assertIn("SÄLJ", label)
         self.assertIn("42000.00", label)
+        # Trade-ID and Order-ID should NOT appear in the popup
+        self.assertNotIn("Trade-ID", label)
+        self.assertNotIn("Order-ID", label)
 
     # ------------------------------------------------------------------
     # generate_chart
@@ -206,6 +212,19 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertTrue(success)
         html_file = self.data_root / "visualize" / "BTC_chart.html"
         self.assertTrue(html_file.exists())
+
+    def test_generate_chart_has_rangeselector_buttons(self):
+        """Verify time-range selector buttons are present in the generated HTML."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        viz.generate_chart("BTC", [])
+        html_file = self.data_root / "visualize" / "BTC_chart.html"
+        content = html_file.read_text(encoding="utf-8")
+        # Button labels are unicode-escaped inside the JSON payload
+        self.assertIn("Senaste veckan", content)
+        self.assertIn("3", content)  # "3 månader" (partial check)
+        self.assertIn("rangeselector", content.lower())
 
     def test_generate_chart_missing_history_returns_false(self):
         viz = VisualizeHistory(self.cfg)
