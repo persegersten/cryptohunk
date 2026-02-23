@@ -274,7 +274,6 @@ class VisualizeHistory:
                 buttons=[
                     dict(count=7, label="Senaste veckan", step="day", stepmode="backward"),
                     dict(count=1, label="Senaste månaden", step="month", stepmode="backward"),
-                    dict(count=3, label="3 månader", step="month", stepmode="backward"),
                     dict(step="all", label="Allt"),
                 ],
                 bgcolor="#2a2a3e",
