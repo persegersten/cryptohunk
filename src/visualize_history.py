@@ -95,8 +95,6 @@ class VisualizeHistory:
         quote_qty = trade.get("quoteQty", "?")
         commission = trade.get("commission", "?")
         commission_asset = trade.get("commissionAsset", "?")
-        trade_id = trade.get("id", "?")
-        order_id = trade.get("orderId", "?")
         trade_time_ms = trade.get("time")
         if trade_time_ms:
             dt = datetime.fromtimestamp(trade_time_ms / 1000, tz=timezone.utc)
@@ -111,9 +109,7 @@ class VisualizeHistory:
             f"Mängd: {qty}<br>"
             f"Totalt (quote): {quote_qty}<br>"
             f"Avgift: {commission} {commission_asset}<br>"
-            f"Tid: {time_str}<br>"
-            f"Trade-ID: {trade_id}<br>"
-            f"Order-ID: {order_id}"
+            f"Tid: {time_str}"
         )
 
     def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> bool:
@@ -273,6 +269,20 @@ class VisualizeHistory:
         fig.update_yaxes(title_text="Pris (USDT)", row=1, col=1)
         fig.update_yaxes(title_text="Volym", row=2, col=1)
         fig.update_xaxes(title_text="Datum/tid", row=2, col=1)
+        fig.update_xaxes(
+            rangeselector=dict(
+                buttons=[
+                    dict(count=7, label="Senaste veckan", step="day", stepmode="backward"),
+                    dict(count=1, label="Senaste månaden", step="month", stepmode="backward"),
+                    dict(count=3, label="3 månader", step="month", stepmode="backward"),
+                    dict(step="all", label="Allt"),
+                ],
+                bgcolor="#2a2a3e",
+                activecolor="#4a4a6e",
+                font=dict(color="#cdd6f4"),
+            ),
+            row=1, col=1,
+        )
 
         self._ensure_dir(self.output_dir)
         html_file = self.output_dir / f"{currency}_chart.html"
