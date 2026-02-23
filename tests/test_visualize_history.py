@@ -221,9 +221,12 @@ class TestVisualizeHistory(unittest.TestCase):
         viz.generate_chart("BTC", [])
         html_file = self.data_root / "visualize" / "BTC_chart.html"
         content = html_file.read_text(encoding="utf-8")
-        # Button labels are unicode-escaped inside the JSON payload
-        self.assertIn("Senaste veckan", content)
-        self.assertIn("3", content)  # "3 månader" (partial check)
+        # Expected buttons (Plotly unicode-escapes Swedish characters)
+        self.assertIn('"label":"Senaste veckan"', content)
+        self.assertIn('"label":"Senaste m\\u00e5naden"', content)
+        self.assertIn('"label":"Allt"', content)
+        # "3 månader" button must be absent
+        self.assertNotIn('"label":"3', content)
         self.assertIn("rangeselector", content.lower())
 
     def test_generate_chart_missing_history_returns_false(self):
