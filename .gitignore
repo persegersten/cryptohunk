@@ -1,6 +1,7 @@
 *.csv
 *.swp
 *.json
+analyse.sh
 local.sh
 portfolio.json
 secrets.json

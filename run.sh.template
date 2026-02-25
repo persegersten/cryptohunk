@@ -13,6 +13,12 @@
 #   export TAKE_PROFIT_PERCENTAGE="10.0"
 #   export STOP_LOSS_PERCENTAGE="6.0"
 #
+#   --ftp-upload
+#   export FTP_HOST="ftp.example.com"
+#   export FTP_USERNAME="user"
+#   export FTP_PASSWORD="pass"
+#   export FTP_HTML_REGEXP=".*_chart\.html$"
+#
 # sedan:
 #   ./run.sh
 
