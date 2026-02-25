@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.offline import get_plotlyjs
 from plotly.subplots import make_subplots
 
 from .config import Config
@@ -344,7 +345,7 @@ class VisualizeHistory:
             '<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             "<title>Kurshistorik</title>\n"
-            '<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>\n'
+            f"<script>{get_plotlyjs()}</script>\n"
             "<style>\n"
             "body{background:#1a1a2e;color:#cdd6f4;font-family:sans-serif;margin:0;padding:0}\n"
             ".vh-header{padding:16px 20px;background:#16213e;border-bottom:1px solid #45475a;"
