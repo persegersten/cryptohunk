@@ -21,3 +21,4 @@ class Config:
     stop_loss_percentage: float
     allowed_quote_assets: List[str]
     raw_env: dict
+    ta2_use_ema50_filter: bool = False
