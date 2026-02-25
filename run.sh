@@ -18,4 +18,6 @@ set -euo pipefail
 PYTHON=${PYTHON:-python3}
 
 echo "Kör AssertEnv och main..."
+# Default: använd TA-strategi (--run-ta). För att använda TA2-strategi, byt --run-ta mot --run-ta2.
+# Exempel med TA2: $PYTHON -m src.main "$@" --clean-data --collect-data --run-ta2 --rebalance-portfolio --create-trade-plan --execute-trades
 $PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades

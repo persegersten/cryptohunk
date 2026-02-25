@@ -37,10 +37,16 @@ def main():
         action="store_true",
         help="Hämta historik, portfolio och trade-historik",
     )
-    parser.add_argument(
+    ta_group = parser.add_mutually_exclusive_group()
+    ta_group.add_argument(
         "--run-ta",
         action="store_true",
         help="Kör teknisk analys på historisk data",
+    )
+    ta_group.add_argument(
+        "--run-ta2",
+        action="store_true",
+        help="Kör teknisk analys och använd TA2-strategi (long-only trend-following pullback) vid rebalansering",
     )
     parser.add_argument(
         "--rebalance-portfolio",
@@ -105,13 +111,13 @@ def main():
         print("Startar sammanställning av portfolio...")
         summarize_portfolio_main(cfg)
 
-    if args.run_ta:
+    if args.run_ta or args.run_ta2:
         print("Startar teknisk analys (TechnicalAnalysis)...")
         technical_analysis_main(cfg)
 
     if args.rebalance_portfolio:
         print("Startar rebalansering av portfölj (RebalancePortfolio)...")
-        rebalance_portfolio_main(cfg)
+        rebalance_portfolio_main(cfg, use_ta2=args.run_ta2)
 
     if args.create_trade_plan:
         print("Skapar handelsplan (CreateTradePlan)...")

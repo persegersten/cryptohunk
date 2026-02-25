@@ -26,3 +26,4 @@ class Config:
     ftp_password: Optional[str]
     ftp_html_regexp: Optional[str]
     raw_env: dict
+    ta2_use_ema50_filter: bool = False

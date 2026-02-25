@@ -6,7 +6,9 @@ Läser in kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_hi
 Beräknar följande tekniska indikatorer:
 - RSI (14 perioder)
 - EMA (12 perioder)
+- EMA (21 perioder)
 - EMA (26 perioder)
+- EMA (50 perioder)
 - EMA (200 perioder)
 - MACD
 
@@ -146,9 +148,11 @@ class TechnicalAnalysis:
 
             # Beräkna EMAs
             result_df["EMA_12"] = self._calculate_ema(df["Close"], period=12)
+            result_df["EMA_21"] = self._calculate_ema(df["Close"], period=21)
             result_df["EMA_26"] = self._calculate_ema(df["Close"], period=26)
+            result_df["EMA_50"] = self._calculate_ema(df["Close"], period=50)
             result_df["EMA_200"] = self._calculate_ema(df["Close"], period=200)
-            log.info("Beräknade EMA(12, 26, 200) för %s", currency)
+            log.info("Beräknade EMA(12, 21, 26, 50, 200) för %s", currency)
 
             # Beräkna MACD
             macd_line, signal_line, macd_histogram = self._calculate_macd(df["Close"])

@@ -5,19 +5,23 @@ RebalancePortfolio - Generate buy/sell recommendations based on TA signals and h
 This module:
 1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv
 2. Reads portfolio summary from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
-3. Calculates TA scores based on:
+3. Calculates TA scores based on (TA strategy):
    - RSI_14 < 30: +1, RSI_14 > 70: -1
    - EMA_12 > EMA_26: +1, EMA_12 < EMA_26: -1
    - MACD > MACD_Signal: +1, MACD < MACD_Signal: -1
    - Close > EMA_200: +1, Close < EMA_200: -1
-4. Generates signals: score >= 1 = BUY, score <= -1 = SELL
-5. Applies override rules:
+4. Alternatively (TA2 strategy, long-only trend-following pullback):
+   - BUY when: Close > EMA_200, MACD > MACD_Signal, Close > EMA_21,
+     RSI_14(t-1) <= 50 AND RSI_14(t) > 50, min(RSI_14 over last 8 candles before t) < 45
+   - SELL when: MACD < MACD_Signal
+5. Generates signals: score >= 1 = BUY, score <= -1 = SELL
+6. Applies override rules:
    - Rule 1: If holdings < TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
    - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
    - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
-6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
-7. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
-8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
+7. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
+8. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
+9. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 """
 import logging
 import csv
@@ -158,6 +162,87 @@ class RebalancePortfolio:
         
         return score
 
+    def _calculate_ta2_signal(self, ta_df: pd.DataFrame) -> int:
+        """
+        Calculate TA2 signal (long-only trend-following pullback strategy).
+
+        Entry (BUY) when all conditions are true on the latest candle t:
+        - Close(t) > EMA_200(t)           -- trend filter
+        - MACD(t) > MACD_Signal(t)        -- momentum confirmation
+        - Close(t) > EMA_21(t)            -- price above short EMA
+        - RSI_14(t-1) <= 50 AND RSI_14(t) > 50  -- RSI crosses up over 50
+        - min(RSI_14(t-8)...RSI_14(t-1)) < 45   -- pullback/reset (excl. entry candle)
+        - Optional: EMA_50(t) > EMA_200(t) if cfg.ta2_use_ema50_filter
+
+        Exit (SELL): MACD(t) < MACD_Signal(t)
+
+        Returns:
+            1 (BUY), -1 (SELL), or 0 (HOLD)
+        """
+        LOOKBACK = 8
+
+        if len(ta_df) < LOOKBACK + 1:
+            log.debug("TA2: not enough rows for lookback (%d < %d)", len(ta_df), LOOKBACK + 1)
+            return 0
+
+        last = ta_df.iloc[-1]
+        prev = ta_df.iloc[-2]
+
+        # Helper to safely get a value
+        def get(row, col):
+            val = row.get(col)
+            return None if val is None or pd.isna(val) else val
+
+        macd = get(last, "MACD")
+        macd_signal = get(last, "MACD_Signal")
+
+        if macd is None or macd_signal is None:
+            return 0
+
+        # Exit rule: SELL when MACD < MACD_Signal
+        if macd < macd_signal:
+            return -1
+
+        # Entry rules (all must be satisfied for BUY)
+        close = get(last, "Close")
+        ema_200 = get(last, "EMA_200")
+        ema_21 = get(last, "EMA_21")
+        rsi_t = get(last, "RSI_14")
+        rsi_prev = get(prev, "RSI_14")
+
+        if any(v is None for v in [close, ema_200, ema_21, rsi_t, rsi_prev]):
+            return 0
+
+        # 1. Trend filter
+        if close <= ema_200:
+            return 0
+
+        # 2. Momentum confirmation (MACD > MACD_Signal; equal counts as HOLD)
+        if macd <= macd_signal:
+            return 0
+
+        # 3. Price above short EMA
+        if close <= ema_21:
+            return 0
+
+        # 4. RSI crosses up over 50
+        if rsi_prev > 50 or rsi_t <= 50:
+            return 0
+
+        # 5. Pullback/reset: min(RSI_14(t-8)...RSI_14(t-1)) < 45
+        #    Indices: t-8 to t-1 = ta_df["RSI_14"].iloc[-(LOOKBACK+1):-1]
+        rsi_lookback = ta_df["RSI_14"].iloc[-(LOOKBACK + 1):-1]
+        if rsi_lookback.isna().any() or rsi_lookback.min() >= 45:
+            return 0
+
+        # 6. Optional EMA50 trend-strength filter
+        if self.cfg.ta2_use_ema50_filter:
+            ema_50 = get(last, "EMA_50")
+            if ema_50 is None or ema_50 <= ema_200:
+                return 0
+
+        return 1
+
     def _generate_signal(self, currency: str, ta_score: int, 
                         current_value_usdc: float, percentage_change: float) -> tuple:
         """
@@ -210,14 +295,19 @@ class RebalancePortfolio:
         else:
             return "HOLD", 3
 
-    def generate_recommendations(self) -> List[Dict]:
+    def generate_recommendations(self, use_ta2: bool = False) -> List[Dict]:
         """
         Generate buy/sell recommendations for all currencies.
-        
+
+        Args:
+            use_ta2: If True, use TA2 (long-only trend-following pullback) strategy.
+                     If False (default), use original TA score strategy.
+
         Returns:
             List of recommendation dictionaries
         """
-        log.info("=== Generating rebalancing recommendations ===")
+        strategy_name = "TA2" if use_ta2 else "TA"
+        log.info("=== Generating rebalancing recommendations (strategy: %s) ===", strategy_name)
         
         # Read portfolio summary
         portfolio_df = self._read_portfolio_summary()
@@ -255,7 +345,10 @@ class RebalancePortfolio:
             
             # Get last row for TA score calculation
             last_row = ta_df.iloc[-1]
-            ta_score = self._calculate_ta_score(last_row)
+            if use_ta2:
+                ta_score = self._calculate_ta2_signal(ta_df)
+            else:
+                ta_score = self._calculate_ta_score(last_row)
             
             # Generate signal with priority
             signal, priority = self._generate_signal(
@@ -362,18 +455,22 @@ class RebalancePortfolio:
             log.error(f"Failed to save recommendations: {e}")
             return False
 
-    def run(self) -> bool:
+    def run(self, use_ta2: bool = False) -> bool:
         """
         Run the rebalancing process.
-        
+
+        Args:
+            use_ta2: If True, use TA2 strategy for signal generation.
+
         Returns:
             True on success, False on failure
         """
-        log.info("=== Starting RebalancePortfolio ===")
+        strategy_name = "TA2" if use_ta2 else "TA"
+        log.info("=== Starting RebalancePortfolio (strategy: %s) ===", strategy_name)
         
         try:
             # Generate all recommendations
-            all_recommendations = self.generate_recommendations()
+            all_recommendations = self.generate_recommendations(use_ta2=use_ta2)
             
             if not all_recommendations:
                 log.warning("No recommendations generated")
@@ -397,14 +494,18 @@ class RebalancePortfolio:
             return False
 
 
-def rebalance_portfolio_main(cfg: Config) -> None:
+def rebalance_portfolio_main(cfg: Config, use_ta2: bool = False) -> None:
     """
     Main entry point for portfolio rebalancing.
     Called from main.py when --rebalance-portfolio flag is set.
     Raises SystemExit(1) on failure.
+
+    Args:
+        cfg: Application configuration.
+        use_ta2: If True, use TA2 strategy for signal generation.
     """
     rebalancer = RebalancePortfolio(cfg)
-    success = rebalancer.run()
+    success = rebalancer.run(use_ta2=use_ta2)
     if not success:
         log.error("RebalancePortfolio failed")
         raise SystemExit(1)
