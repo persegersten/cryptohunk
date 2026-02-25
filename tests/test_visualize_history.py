@@ -35,6 +35,11 @@ def _make_cfg(data_root: str) -> Config:
         take_profit_percentage=10.0,
         stop_loss_percentage=6.0,
         allowed_quote_assets=["USDT"],
+        ftp_host=None,
+        ftp_dir=None,
+        ftp_username=None,
+        ftp_password=None,
+        ftp_html_regexp=None,
         raw_env={},
     )
 
