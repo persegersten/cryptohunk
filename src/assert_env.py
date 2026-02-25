@@ -18,6 +18,7 @@ Miljövariabler som hanteras:
 - TAKE_PROFIT_PERCENTAGE (valfritt, float, default: 10.0)
 - STOP_LOSS_PERCENTAGE (valfritt, float, default: 6.0)
 - QUOTE_ASSETS (valfritt, ex "USDT,USDC" — vilka quote-valutor vi vill hämta trades för)
+- TA2_USE_EMA50_FILTER (valfritt, true/false, default: false)
 """
 import os
 from typing import List
@@ -107,6 +108,7 @@ def load_config_from_env() -> Config:
         raise EnvironmentError("STOP_LOSS_PERCENTAGE måste vara ett tal (float).")
 
     dry_run = _parse_bool(env.get("DRY_RUN", "false"))
+    ta2_use_ema50_filter = _parse_bool(env.get("TA2_USE_EMA50_FILTER", "false"))
 
     binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
     binance_currency_history_endpoint = env.get(
@@ -143,6 +145,7 @@ def load_config_from_env() -> Config:
         take_profit_percentage=take_profit_percentage,
         stop_loss_percentage=stop_loss_percentage,
         allowed_quote_assets=allowed_quote_assets,
+        ta2_use_ema50_filter=ta2_use_ema50_filter,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
 
