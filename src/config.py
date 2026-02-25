@@ -20,5 +20,10 @@ class Config:
     take_profit_percentage: float
     stop_loss_percentage: float
     allowed_quote_assets: List[str]
+    ftp_host: Optional[str]
+    ftp_dir: Optional[str]
+    ftp_username: Optional[str]
+    ftp_password: Optional[str]
+    ftp_html_regexp: Optional[str]
     raw_env: dict
     ta2_use_ema50_filter: bool = False

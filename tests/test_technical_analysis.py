@@ -48,6 +48,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
             take_profit_percentage=10.0,  # 10% take profit
             stop_loss_percentage=6.0,  # 6% stop loss
             allowed_quote_assets=["USDT"],
+            ftp_host=None,
+            ftp_dir=None,
+            ftp_username=None,
+            ftp_password=None,
+            ftp_html_regexp=None,
             raw_env={}
         )
 
@@ -261,6 +266,11 @@ class TestTechnicalAnalysis(unittest.TestCase):
             take_profit_percentage=10.0,  # 10% take profit
             stop_loss_percentage=6.0,  # 6% stop loss
             allowed_quote_assets=["USDT"],
+            ftp_host=None,
+            ftp_dir=None,
+            ftp_username=None,
+            ftp_password=None,
+            ftp_html_regexp=None,
             raw_env={}
         )
         
