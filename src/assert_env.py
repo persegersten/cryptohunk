@@ -126,6 +126,13 @@ def load_config_from_env() -> Config:
         # Minimalt skydd: sätt default om parsing misslyckas
         allowed_quote_assets = _parse_currencies(defaults["QUOTE_ASSETS"])
 
+    # Valfria FTP-inställningar
+    ftp_host = env.get("FTP_HOST", "").strip() or None
+    ftp_dir = env.get("FTP_DIR", "").strip() or None
+    ftp_username = env.get("FTP_USERNAME", "").strip() or None
+    ftp_password = env.get("FTP_PASSWORD", "").strip() or None
+    ftp_html_regexp = env.get("FTP_HTML_REGEXP", "").strip() or None
+
     cfg = Config(
         currencies=currencies,
         binance_secret=binance_secret,
@@ -143,6 +150,11 @@ def load_config_from_env() -> Config:
         take_profit_percentage=take_profit_percentage,
         stop_loss_percentage=stop_loss_percentage,
         allowed_quote_assets=allowed_quote_assets,
+        ftp_host=ftp_host,
+        ftp_dir=ftp_dir,
+        ftp_username=ftp_username,
+        ftp_password=ftp_password,
+        ftp_html_regexp=ftp_html_regexp,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
 

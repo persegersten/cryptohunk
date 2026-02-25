@@ -17,6 +17,7 @@ from .rebalance_portfolio import rebalance_portfolio_main
 from .create_trade_plan import create_trade_plan_main
 from .execute_trade_plan import execute_trade_plan_main
 from .visualize_history import visualize_history_main
+from .ftp_upload import ftp_upload_main
 
 
 def main():
@@ -60,6 +61,11 @@ def main():
         "--visualize",
         action="store_true",
         help="Generera interaktivt kurshistorikdiagram med köp/säljmarkeringar",
+    )
+    parser.add_argument(
+        "--ftp-upload",
+        action="store_true",
+        help="Ladda upp HTML-filer som matchar FTP_HTML_REGEXP via FTP",
     )
     args = parser.parse_args()
 
@@ -118,6 +124,10 @@ def main():
     if args.visualize:
         print("Genererar kurshistorikdiagram (VisualizeHistory)...")
         visualize_history_main(cfg)
+
+    if args.ftp_upload:
+        print("Laddar upp HTML-filer via FTP (FtpUpload)...")
+        ftp_upload_main(cfg)
 
     print("\nKlar.")
 
