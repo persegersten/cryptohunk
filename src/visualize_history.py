@@ -5,13 +5,14 @@ VisualizeHistory - Generera interaktivt kurshistorikdiagram med köp/säljmarker
 Läser kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv
 och tradehistorik från DATA_AREA_ROOT_DIR/trades/trades.json.
 
-Genererar ett interaktivt HTML-diagram per valuta med:
+Genererar ett interaktivt HTML-dokument med alla valutor och en dropdown-meny för
+att välja vilken valuta som visas. Varje valutadiagram innehåller:
 - Stearinljusdiagram (candlestick) för kurshistorik
 - Gröna pilar uppåt (▲) för köp
 - Röda pilar nedåt (▼) för sälj
 - Klick på köp/sälj-symbol visar detaljerad handelsinformation
 
-Sparar resultaten i DATA_AREA_ROOT_DIR/visualize/<currency>_chart.html
+Sparar resultaten i DATA_AREA_ROOT_DIR/visualize/history_chart.html
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.offline import get_plotlyjs
 from plotly.subplots import make_subplots
 
 from .config import Config
@@ -112,21 +114,21 @@ class VisualizeHistory:
             f"Tid: {time_str}"
         )
 
-    def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> bool:
+    def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> Optional[str]:
         """
-        Generera interaktivt HTML-diagram för angiven valuta.
+        Generera HTML-div för angiven valuta.
 
         Args:
             currency: Valutasymbol (t.ex. "BTC")
             trades: Lista med alla trades (filtreras internt för currency)
 
         Returns:
-            True vid succé, False vid fel
+            HTML-sträng (div) vid succé, None vid fel
         """
         df = self._read_history(currency)
         if df is None or df.empty:
             log.warning("Ingen kurshistorik för %s – hoppar över diagram", currency)
-            return False
+            return None
 
         currency_trades = self._filter_trades_for_currency(trades, currency)
 
@@ -240,21 +242,6 @@ class VisualizeHistory:
                     row=1, col=1,
                 )
 
-        # Klick-interaktion: visa detaljerad handelsinformation i en ruta på sidan
-        click_js = """
-        var myPlot = document.getElementById('chart');
-        myPlot.on('plotly_click', function(data) {
-            var point = data.points[0];
-            var infoBox = document.getElementById('trade-info');
-            if (point.customdata) {
-                infoBox.innerHTML = point.customdata.replace(/<br>/g, '<br>');
-                infoBox.style.display = 'block';
-            } else {
-                infoBox.style.display = 'none';
-            }
-        });
-        """
-
         fig.update_layout(
             title=dict(
                 text=f"{currency}/USDT – Kurshistorik med köp och sälj",
@@ -283,18 +270,34 @@ class VisualizeHistory:
             row=1, col=1,
         )
 
-        self._ensure_dir(self.output_dir)
-        html_file = self.output_dir / f"{currency}_chart.html"
-
-        # Generera HTML med klick-interaktion
-        html_body = fig.to_html(
-            full_html=True,
-            include_plotlyjs=True,
-            div_id="chart",
-            post_script=click_js,
+        log.info("Diagram byggt för %s", currency)
+        return fig.to_html(
+            full_html=False,
+            include_plotlyjs=False,
+            div_id=f"chart-{currency}",
         )
 
-        # Injicera info-rutan i HTML-bodyn
+    def _build_combined_html(self, charts: Dict[str, str]) -> str:
+        """Bygg kombinerat HTML-dokument med flikar för valutaval."""
+        currencies = list(charts.keys())
+
+        tabs_html = "\n".join(
+            '<button class="vh-tab{active}" id="tab-{c}" onclick="showChart(\'{c}\')">{c}</button>'.format(
+                c=c,
+                active=" vh-tab-active" if i == 0 else "",
+            )
+            for i, c in enumerate(currencies)
+        )
+
+        chart_sections = "\n".join(
+            '<div id="wrapper-{c}" style="display:{d}">{html}</div>'.format(
+                c=c,
+                d="" if i == 0 else "none",
+                html=charts[c],
+            )
+            for i, c in enumerate(currencies)
+        )
+
         info_box_html = (
             '<div id="trade-info" style="'
             "display:none; position:fixed; top:80px; right:20px; "
@@ -308,44 +311,115 @@ class VisualizeHistory:
             "<b>Handelsinformation</b><br><br>"
             "</div>"
         )
-        html_body = html_body.replace("</body>", info_box_html + "\n</body>")
 
-        try:
-            with open(html_file, "w", encoding="utf-8") as f:
-                f.write(html_body)
-            log.info("Diagram sparat: %s", html_file)
-            return True
-        except Exception as e:
-            log.error("Fel vid sparande av diagram för %s: %s", currency, e)
-            return False
+        currency_json = ", ".join(f'"{c}"' for c in currencies)
+
+        combined_js = (
+            "var _currencies = [" + currency_json + "];\n"
+            "function showChart(c) {\n"
+            "  _currencies.forEach(function(x) {\n"
+            "    var w = document.getElementById('wrapper-' + x);\n"
+            "    if (w) w.style.display = x === c ? '' : 'none';\n"
+            "    var t = document.getElementById('tab-' + x);\n"
+            "    if (t) t.className = x === c ? 'vh-tab vh-tab-active' : 'vh-tab';\n"
+            "  });\n"
+            "  var el = document.getElementById('chart-' + c);\n"
+            "  if (el) Plotly.Plots.resize(el);\n"
+            "}\n"
+            "window.addEventListener('load', function() {\n"
+            "  _currencies.forEach(function(c) {\n"
+            "    var el = document.getElementById('chart-' + c);\n"
+            "    if (el) el.on('plotly_click', function(data) {\n"
+            "      var pt = data.points[0];\n"
+            "      var box = document.getElementById('trade-info');\n"
+            "      if (pt && pt.customdata) {\n"
+            "        box.innerHTML = pt.customdata.replace(/<br>/g, '<br>');\n"
+            "        box.style.display = 'block';\n"
+            "      } else {\n"
+            "        box.style.display = 'none';\n"
+            "      }\n"
+            "    });\n"
+            "  });\n"
+            "});\n"
+        )
+
+        return (
+            "<!DOCTYPE html>\n"
+            '<html lang="sv">\n'
+            "<head>\n"
+            '<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            "<title>Kurshistorik</title>\n"
+            f"<script>{get_plotlyjs()}</script>\n"
+            "<style>\n"
+            "body{background:#1a1a2e;color:#cdd6f4;font-family:sans-serif;margin:0;padding:0}\n"
+            ".vh-tabs{padding:0 20px;background:#16213e;border-bottom:1px solid #45475a;"
+            "display:flex;align-items:flex-end;gap:4px}\n"
+            ".vh-tab{background:#2a2a3e;color:#cdd6f4;border:1px solid #45475a;"
+            "border-bottom:none;border-radius:6px 6px 0 0;padding:10px 20px;"
+            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s}\n"
+            ".vh-tab:hover{background:#3a3a5e}\n"
+            ".vh-tab-active{background:#1a1a2e;color:#89dceb;border-bottom:1px solid #1a1a2e}\n"
+            "</style>\n"
+            "</head>\n"
+            "<body>\n"
+            '<div class="vh-tabs">\n'
+            f"{tabs_html}\n"
+            "</div>\n"
+            f"{chart_sections}\n"
+            f"{info_box_html}\n"
+            f"<script>{combined_js}</script>\n"
+            "</body>\n"
+            "</html>"
+        )
 
     def run(self) -> bool:
         """
-        Generera diagram för alla konfigurerade valutor.
+        Generera ett kombinerat diagram för alla konfigurerade valutor.
 
         Returns:
             True om minst ett diagram genererades framgångsrikt
         """
         log.info("=== Startar VisualizeHistory ===")
         trades = self._read_trades()
-        success_count = 0
+        charts: Dict[str, str] = {}
 
         for currency in self.cfg.currencies:
             try:
-                if self.generate_chart(currency, trades):
-                    success_count += 1
+                div = self.generate_chart(currency, trades)
+                if div is not None:
+                    charts[currency] = div
                     log.info("Diagram genererat för %s", currency)
                 else:
                     log.warning("Kunde inte generera diagram för %s", currency)
             except Exception as e:
                 log.error("Oväntat fel vid generering av diagram för %s: %s", currency, e)
 
+        if not charts:
+            log.info(
+                "VisualizeHistory klar: 0/%d diagram genererade",
+                len(self.cfg.currencies),
+            )
+            return False
+
+        self._ensure_dir(self.output_dir)
+        html_file = self.output_dir / "history_chart.html"
+        html_content = self._build_combined_html(charts)
+
+        try:
+            with open(html_file, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            log.info("Kombinerat diagram sparat: %s", html_file)
+        except Exception as e:
+            log.error("Fel vid sparande av kombinerat diagram: %s", e)
+            return False
+
         log.info(
             "VisualizeHistory klar: %d/%d diagram genererade",
-            success_count,
+            len(charts),
             len(self.cfg.currencies),
         )
-        return success_count > 0
+        return True
 
 
 def visualize_history_main(cfg: Config) -> None:
