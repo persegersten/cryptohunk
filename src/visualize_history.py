@@ -278,12 +278,15 @@ class VisualizeHistory:
         )
 
     def _build_combined_html(self, charts: Dict[str, str]) -> str:
-        """Bygg kombinerat HTML-dokument med dropdown för valutaval."""
+        """Bygg kombinerat HTML-dokument med flikar för valutaval."""
         currencies = list(charts.keys())
 
-        options_html = "\n".join(
-            f'    <option value="{c}">{c}</option>'
-            for c in currencies
+        tabs_html = "\n".join(
+            '<button class="vh-tab{active}" id="tab-{c}" onclick="showChart(\'{c}\')">{c}</button>'.format(
+                c=c,
+                active=" vh-tab-active" if i == 0 else "",
+            )
+            for i, c in enumerate(currencies)
         )
 
         chart_sections = "\n".join(
@@ -317,6 +320,8 @@ class VisualizeHistory:
             "  _currencies.forEach(function(x) {\n"
             "    var w = document.getElementById('wrapper-' + x);\n"
             "    if (w) w.style.display = x === c ? '' : 'none';\n"
+            "    var t = document.getElementById('tab-' + x);\n"
+            "    if (t) t.className = x === c ? 'vh-tab vh-tab-active' : 'vh-tab';\n"
             "  });\n"
             "  var el = document.getElementById('chart-' + c);\n"
             "  if (el) Plotly.Plots.resize(el);\n"
@@ -348,19 +353,18 @@ class VisualizeHistory:
             f"<script>{get_plotlyjs()}</script>\n"
             "<style>\n"
             "body{background:#1a1a2e;color:#cdd6f4;font-family:sans-serif;margin:0;padding:0}\n"
-            ".vh-header{padding:16px 20px;background:#16213e;border-bottom:1px solid #45475a;"
-            "display:flex;align-items:center;gap:16px}\n"
-            ".vh-header label{font-size:15px}\n"
-            ".vh-header select{background:#2a2a3e;color:#cdd6f4;border:1px solid #45475a;"
-            "border-radius:6px;padding:6px 12px;font-size:15px;cursor:pointer}\n"
+            ".vh-tabs{padding:0 20px;background:#16213e;border-bottom:1px solid #45475a;"
+            "display:flex;align-items:flex-end;gap:4px}\n"
+            ".vh-tab{background:#2a2a3e;color:#cdd6f4;border:1px solid #45475a;"
+            "border-bottom:none;border-radius:6px 6px 0 0;padding:10px 20px;"
+            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s}\n"
+            ".vh-tab:hover{background:#3a3a5e}\n"
+            ".vh-tab-active{background:#1a1a2e;color:#89dceb;border-bottom:1px solid #1a1a2e}\n"
             "</style>\n"
             "</head>\n"
             "<body>\n"
-            '<div class="vh-header">\n'
-            '  <label for="currency-select">Välj valuta:</label>\n'
-            '  <select id="currency-select" onchange="showChart(this.value)">\n'
-            f"{options_html}\n"
-            "  </select>\n"
+            '<div class="vh-tabs">\n'
+            f"{tabs_html}\n"
             "</div>\n"
             f"{chart_sections}\n"
             f"{info_box_html}\n"

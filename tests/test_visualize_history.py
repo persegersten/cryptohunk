@@ -245,7 +245,8 @@ class TestVisualizeHistory(unittest.TestCase):
         html_file = self.data_root / "visualize" / "history_chart.html"
         self.assertTrue(html_file.exists())
         content = html_file.read_text(encoding="utf-8")
-        self.assertIn("currency-select", content)
+        self.assertIn("vh-tab", content)
+        self.assertIn('id="tab-BTC"', content)
         self.assertIn("BTC", content)
         self.assertIn("trade-info", content)
 
