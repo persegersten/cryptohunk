@@ -8,6 +8,7 @@ secrets.json
 history/
 output/
 trades/
+tmp/
 downloaded_originals/
 
 # Byte-compiled / optimized / DLL files

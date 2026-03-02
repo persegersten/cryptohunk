@@ -175,7 +175,7 @@ class TestVisualizeHistory(unittest.TestCase):
     # generate_chart
     # ------------------------------------------------------------------
 
-    def test_generate_chart_creates_html_file(self):
+    def test_generate_chart_returns_html(self):
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
 
@@ -194,50 +194,43 @@ class TestVisualizeHistory(unittest.TestCase):
             },
         ]
         viz = VisualizeHistory(self.cfg)
-        success = viz.generate_chart("BTC", trades)
-        self.assertTrue(success)
+        html_content = viz.generate_chart("BTC", trades)
+        self.assertIsNotNone(html_content)
 
-        html_file = self.data_root / "visualize" / "BTC_chart.html"
-        self.assertTrue(html_file.exists())
-
-        content = html_file.read_text(encoding="utf-8")
-        self.assertIn("plotly", content.lower())
-        self.assertIn("trade-info", content)
+        self.assertIn("plotly", html_content.lower())
         # Trade data is unicode-escaped by Plotly; check for unescaped identifiers
-        self.assertIn("BTCUSDT", content)
+        self.assertIn("BTCUSDT", html_content)
         # Check that both buy and sell trace names are present (unicode-escaped)
-        self.assertIn('"name":"K\\u00f6p"', content)
-        self.assertIn('"name":"S\\u00e4lj"', content)
+        self.assertIn('"name":"K\\u00f6p"', html_content)
+        self.assertIn('"name":"S\\u00e4lj"', html_content)
 
     def test_generate_chart_without_trades(self):
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        success = viz.generate_chart("BTC", [])
-        self.assertTrue(success)
-        html_file = self.data_root / "visualize" / "BTC_chart.html"
-        self.assertTrue(html_file.exists())
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        self.assertIn("plotly", html_content.lower())
 
     def test_generate_chart_has_rangeselector_buttons(self):
         """Verify time-range selector buttons are present in the generated HTML."""
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        viz.generate_chart("BTC", [])
-        html_file = self.data_root / "visualize" / "BTC_chart.html"
-        content = html_file.read_text(encoding="utf-8")
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
         # Expected buttons (Plotly unicode-escapes Swedish characters)
-        self.assertIn('"label":"Senaste veckan"', content)
-        self.assertIn('"label":"Senaste m\\u00e5naden"', content)
-        self.assertIn('"label":"Allt"', content)
+        self.assertIn('"label":"Senaste veckan"', html_content)
+        self.assertIn('"label":"Senaste m\\u00e5naden"', html_content)
+        self.assertIn('"label":"Allt"', html_content)
         # "3 månader" button must be absent
-        self.assertNotIn('"label":"3', content)
-        self.assertIn("rangeselector", content.lower())
+        self.assertNotIn('"label":"3', html_content)
+        self.assertIn("rangeselector", html_content.lower())
 
-    def test_generate_chart_missing_history_returns_false(self):
+    def test_generate_chart_missing_history_returns_none(self):
         viz = VisualizeHistory(self.cfg)
-        success = viz.generate_chart("BTC", [])
-        self.assertFalse(success)
+        result = viz.generate_chart("BTC", [])
+        self.assertIsNone(result)
 
     # ------------------------------------------------------------------
     # run
@@ -249,8 +242,13 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
         self.assertTrue(success)
-        html_file = self.data_root / "visualize" / "BTC_chart.html"
+        html_file = self.data_root / "visualize" / "history_chart.html"
         self.assertTrue(html_file.exists())
+        content = html_file.read_text(encoding="utf-8")
+        self.assertIn("vh-tab", content)
+        self.assertIn('id="tab-BTC"', content)
+        self.assertIn("BTC", content)
+        self.assertIn("trade-info", content)
 
     def test_run_returns_false_when_no_history(self):
         viz = VisualizeHistory(self.cfg)
