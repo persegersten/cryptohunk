@@ -114,6 +114,48 @@ class VisualizeHistory:
             f"Tid: {time_str}"
         )
 
+    def _build_performance_series(
+        self, df: pd.DataFrame, period: str
+    ) -> pd.DataFrame:
+        """
+        Bygg en normaliserad performance-serie baserad på Close-pris.
+
+        Normaliseringsformel: (current_value / start_value) * 100
+
+        Args:
+            df: DataFrame med kurshistorik (måste innehålla 'datetime' och 'Close')
+            period: 'week' | 'month' | 'all'
+
+        Returns:
+            DataFrame med kolumnerna 'datetime' och 'performance'
+        """
+        if df.empty or "Close" not in df.columns or "datetime" not in df.columns:
+            return pd.DataFrame(columns=["datetime", "performance"])
+
+        now = df["datetime"].max()
+        if period == "week":
+            subset = df[df["datetime"] >= now - pd.Timedelta(days=7)].copy()
+        elif period == "month":
+            subset = df[df["datetime"] >= now - pd.Timedelta(days=30)].copy()
+        else:  # 'all'
+            subset = df.copy()
+
+        if subset.empty:
+            return pd.DataFrame(columns=["datetime", "performance"])
+
+        try:
+            start_value = float(subset["Close"].iloc[0])
+        except (ValueError, TypeError, IndexError):
+            log.warning("Kunde inte beräkna startvärde för performance (%s)", period)
+            return pd.DataFrame(columns=["datetime", "performance"])
+
+        if start_value == 0:
+            log.warning("Startvärde för performance är 0 (%s) – hoppar över", period)
+            return pd.DataFrame(columns=["datetime", "performance"])
+
+        subset["performance"] = (subset["Close"] / start_value) * 100
+        return subset[["datetime", "performance"]].reset_index(drop=True)
+
     def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> Optional[str]:
         """
         Generera HTML-div för angiven valuta.
@@ -132,11 +174,12 @@ class VisualizeHistory:
 
         currency_trades = self._filter_trades_for_currency(trades, currency)
 
-        # Skapa subplot med candlestick och volym
+        # Skapa subplot med candlestick, volym och performance
+        # Fördelning: 50 % kurs, 17 % volym, 33 % performance
         fig = make_subplots(
-            rows=2, cols=1,
+            rows=3, cols=1,
             shared_xaxes=True,
-            row_heights=[0.75, 0.25],
+            row_heights=[0.50, 0.17, 0.33],
             vertical_spacing=0.03,
         )
 
@@ -242,6 +285,78 @@ class VisualizeHistory:
                     row=1, col=1,
                 )
 
+        # --- Performance-serier ---
+        # Räkna baslinjetracear (candlestick + volym + eventuella köp/sälj)
+        n_base_traces = len(fig.data)
+
+        perf_all = self._build_performance_series(df, "all")
+        perf_week = self._build_performance_series(df, "week")
+        perf_month = self._build_performance_series(df, "month")
+
+        def _perf_trace(perf_df: pd.DataFrame, label: str, visible: bool) -> go.Scatter:
+            x = perf_df["datetime"].tolist() if not perf_df.empty else []
+            y = perf_df["performance"].tolist() if not perf_df.empty else []
+            return go.Scatter(
+                x=x,
+                y=y,
+                name=label,
+                visible=visible,
+                line=dict(width=2, color="#89dceb"),
+                hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Performance: %{y:.2f}<extra></extra>",
+                showlegend=True,
+            )
+
+        fig.add_trace(_perf_trace(perf_all, "Performance (allt)", True), row=3, col=1)
+        fig.add_trace(_perf_trace(perf_week, "Performance (vecka)", False), row=3, col=1)
+        fig.add_trace(_perf_trace(perf_month, "Performance (månad)", False), row=3, col=1)
+
+        # Referenslinje vid 100
+        fig.add_shape(
+            type="line",
+            x0=0, x1=1, xref="paper",
+            y0=100, y1=100, yref="y3",
+            line=dict(color="#888888", width=1, dash="dash"),
+        )
+
+        # Beräkna datumgränser för x-axeluppdatering vid periodval
+        now_ts = df["datetime"].max()
+        week_start_ts = now_ts - pd.Timedelta(days=7)
+        month_start_ts = now_ts - pd.Timedelta(days=30)
+        all_start_ts = df["datetime"].min()
+
+        def _iso(ts: pd.Timestamp) -> str:
+            return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+        def _vis(perf_idx: int) -> List[bool]:
+            return [True] * n_base_traces + [i == perf_idx for i in range(3)]
+
+        perf_buttons = [
+            dict(
+                label="Allt",
+                method="update",
+                args=[
+                    {"visible": _vis(0)},
+                    {"xaxis.range": [_iso(all_start_ts), _iso(now_ts)]},
+                ],
+            ),
+            dict(
+                label="Senaste veckan",
+                method="update",
+                args=[
+                    {"visible": _vis(1)},
+                    {"xaxis.range": [_iso(week_start_ts), _iso(now_ts)]},
+                ],
+            ),
+            dict(
+                label="Senaste månaden",
+                method="update",
+                args=[
+                    {"visible": _vis(2)},
+                    {"xaxis.range": [_iso(month_start_ts), _iso(now_ts)]},
+                ],
+            ),
+        ]
+
         fig.update_layout(
             title=dict(
                 text=f"{currency}/USDT – Kurshistorik med köp och sälj",
@@ -251,11 +366,27 @@ class VisualizeHistory:
             template="plotly_dark",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=60, r=20, t=80, b=40),
-            height=700,
+            height=900,
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    direction="right",
+                    x=0.0,
+                    xanchor="left",
+                    y=-0.05,
+                    yanchor="top",
+                    showactive=True,
+                    buttons=perf_buttons,
+                    bgcolor="#2a2a3e",
+                    bordercolor="#45475a",
+                    font=dict(color="#cdd6f4"),
+                )
+            ],
         )
         fig.update_yaxes(title_text="Pris (USDT)", row=1, col=1)
         fig.update_yaxes(title_text="Volym", row=2, col=1)
-        fig.update_xaxes(title_text="Datum/tid", row=2, col=1)
+        fig.update_yaxes(title_text="Performance", row=3, col=1)
+        fig.update_xaxes(title_text="Datum/tid", row=3, col=1)
         fig.update_xaxes(
             rangeselector=dict(
                 buttons=[

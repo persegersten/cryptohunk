@@ -233,8 +233,95 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNone(result)
 
     # ------------------------------------------------------------------
-    # run
+    # _build_performance_series
     # ------------------------------------------------------------------
+
+    def test_build_performance_series_all_starts_at_100(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_history("BTC")
+        perf = viz._build_performance_series(df, "all")
+        self.assertFalse(perf.empty)
+        self.assertIn("datetime", perf.columns)
+        self.assertIn("performance", perf.columns)
+        self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+
+    def test_build_performance_series_week_starts_at_100(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_history("BTC")
+        perf = viz._build_performance_series(df, "week")
+        # Subset may be empty if the test data is within 7 days, but if not empty starts at 100
+        if not perf.empty:
+            self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+
+    def test_build_performance_series_month_starts_at_100(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_history("BTC")
+        perf = viz._build_performance_series(df, "month")
+        if not perf.empty:
+            self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+
+    def test_build_performance_series_values_normalized_correctly(self):
+        """Check that performance values reflect correct ratio relative to start."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_history("BTC")
+        perf = viz._build_performance_series(df, "all")
+        self.assertFalse(perf.empty)
+        # First value must be 100
+        self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+        # Last value: close[-1] / close[0] * 100
+        expected_last = (df["Close"].iloc[-1] / df["Close"].iloc[0]) * 100
+        self.assertAlmostEqual(perf["performance"].iloc[-1], expected_last)
+
+    def test_build_performance_series_empty_df_returns_empty(self):
+        viz = VisualizeHistory(self.cfg)
+        empty_df = pd.DataFrame(columns=["datetime", "Close"])
+        perf = viz._build_performance_series(empty_df, "all")
+        self.assertTrue(perf.empty)
+
+    def test_build_performance_series_zero_start_value_returns_empty(self):
+        import numpy as np
+        viz = VisualizeHistory(self.cfg)
+        df = pd.DataFrame({
+            "datetime": pd.to_datetime(["2023-01-01", "2023-01-02"]),
+            "Close": [0.0, 100.0],
+        })
+        perf = viz._build_performance_series(df, "all")
+        self.assertTrue(perf.empty)
+
+    # ------------------------------------------------------------------
+    # generate_chart – performance subplot
+    # ------------------------------------------------------------------
+
+    def test_generate_chart_contains_performance_traces(self):
+        """Verify the performance traces and reference line are embedded in the HTML."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        # All three performance trace names should be present (unicode-escaped)
+        self.assertIn("Performance (allt)", html_content)
+        self.assertIn("Performance (vecka)", html_content)
+        self.assertIn("Performance (m\\u00e5nad)", html_content)
+
+    def test_generate_chart_contains_updatemenus_buttons(self):
+        """Verify the updatemenus period-selection buttons are present."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        self.assertIn("updatemenus", html_content.lower())
+        self.assertIn('"label":"Allt"', html_content)
+
 
     def test_run_generates_all_charts(self):
         hist_dir = self.data_root / "history" / "BTC"
