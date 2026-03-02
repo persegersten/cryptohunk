@@ -250,17 +250,19 @@ class TestVisualizeHistory(unittest.TestCase):
         perf = viz._build_portfolio_performance([], {})
         self.assertTrue(perf.empty)
 
-    def test_build_portfolio_performance_first_value_is_100(self):
-        """After a buy, first data point with holdings should be normalized to 100."""
+    def test_build_portfolio_performance_first_value_is_usdc(self):
+        """After a buy, first data point with holdings should equal qty × close_price in USDC."""
         hist_dir = self.data_root / "history" / "BTC"
         base_ms = 1_700_000_000_000
+        expected_qty = 0.01
+        expected_first_price = 40000  # _create_history_csv: prices[0] = 40000 + 0*10
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
             {
                 "symbol": "BTCUSDT", "isBuyer": True,
-                "qty": "0.01", "price": "40000",
+                "qty": str(expected_qty), "price": str(expected_first_price),
                 "time": base_ms,  # at the very first candle
             }
         ]
@@ -268,7 +270,11 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertFalse(perf.empty)
         self.assertIn("datetime", perf.columns)
         self.assertIn("portfolio_value", perf.columns)
-        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], 100.0)
+        self.assertAlmostEqual(
+            perf["portfolio_value"].iloc[0],
+            expected_qty * expected_first_price,
+            places=4,
+        )
 
     def test_build_portfolio_performance_sell_reduces_holdings(self):
         """After buying and then selling all, portfolio value should drop to 0."""
@@ -297,6 +303,11 @@ class TestVisualizeHistory(unittest.TestCase):
     def test_build_portfolio_performance_multiple_currencies(self):
         """Portfolio value sums contributions from multiple currencies."""
         base_ms = 1_700_000_000_000
+        # _create_history_csv: prices[0] = 40000 + 0*10 = 40000 for both currencies
+        btc_qty = 0.01
+        eth_qty = 1.0
+        first_price = 40000
+        expected_first_value = btc_qty * first_price + eth_qty * first_price
         for currency in ["BTC", "ETH"]:
             hist_dir = self.data_root / "history" / currency
             _create_history_csv(hist_dir, currency, n=10)
@@ -306,14 +317,15 @@ class TestVisualizeHistory(unittest.TestCase):
             "ETH": viz._read_history("ETH"),
         }
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
-             "price": "40000", "time": base_ms},
-            {"symbol": "ETHUSDT", "isBuyer": True, "qty": "1.0",
-             "price": "40000", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": str(btc_qty),
+             "price": str(first_price), "time": base_ms},
+            {"symbol": "ETHUSDT", "isBuyer": True, "qty": str(eth_qty),
+             "price": str(first_price), "time": base_ms},
         ]
         perf = viz._build_portfolio_performance(trades, dfs)
         self.assertFalse(perf.empty)
-        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], 100.0)
+        # First value should be the actual combined USDC value, not 100
+        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], expected_first_value, places=2)
 
     # ------------------------------------------------------------------
     # generate_portfolio_chart

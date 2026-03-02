@@ -123,16 +123,16 @@ class VisualizeHistory:
         Beräkna portföljvärde över tid baserat på faktiska innehav.
 
         Vid varje tidpunkt summeras innehav × aktuellt pris för alla valutor.
-        Resultatet normaliseras så att första värdet med positivt innehav = 100.
+        Värdet returneras i USDC (ej normaliserat).
 
-        Formel: normalized_value = (portfolio_value / start_value) * 100
+        Formel: portfolio_value = Σ position[valuta] × close_price[valuta]
 
         Args:
             trades: Lista med alla trades (isBuyer, qty, symbol, time)
             dfs: Dict med {valuta: DataFrame med 'datetime' och 'Close'}
 
         Returns:
-            DataFrame med kolumnerna 'datetime' och 'portfolio_value'
+            DataFrame med kolumnerna 'datetime' och 'portfolio_value' (USDC)
         """
         if not dfs:
             return pd.DataFrame(columns=["datetime", "portfolio_value"])
@@ -221,19 +221,8 @@ class VisualizeHistory:
             log.info("Portföljberäkning: inget positivt innehav hittades")
             return pd.DataFrame(columns=["datetime", "portfolio_value"])
 
-        try:
-            start_value = float(result["portfolio_value"].iloc[0])
-        except (ValueError, TypeError, IndexError):
-            log.warning("Kunde inte beräkna startvärde för portföljperformance")
-            return pd.DataFrame(columns=["datetime", "portfolio_value"])
-
-        if start_value == 0:
-            log.warning("Startvärde för portföljperformance är 0 – hoppar över")
-            return pd.DataFrame(columns=["datetime", "portfolio_value"])
-
-        result["portfolio_value"] = (result["portfolio_value"] / start_value) * 100
         log.info(
-            "Portföljperformance beräknad: %d datapunkter, start=%.2f, slut=%.2f",
+            "Portföljvärde beräknat: %d datapunkter, start=%.2f USDC, slut=%.2f USDC",
             len(result),
             result["portfolio_value"].iloc[0],
             result["portfolio_value"].iloc[-1],
@@ -246,10 +235,10 @@ class VisualizeHistory:
         dfs: Dict[str, pd.DataFrame],
     ) -> Optional[str]:
         """
-        Generera HTML-div för portföljperformance-fliken.
+        Generera HTML-div för portföljvärde-fliken.
 
-        Visar portföljvärdet (innehav × pris) över tid, normaliserat till 100
-        vid den första tidpunkten med positivt innehav.
+        Visar portföljets totala värde i USDC (innehav × pris, summerat för alla valutor)
+        över tid. Y-axeln visar faktiskt USDC-värde (ej normaliserat).
 
         Args:
             trades: Lista med alla trades
@@ -273,25 +262,17 @@ class VisualizeHistory:
                 line=dict(width=2, color="#89dceb"),
                 fill="tozeroy",
                 fillcolor="rgba(137, 220, 235, 0.08)",
-                hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Index: %{y:.2f}<extra></extra>",
+                hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Värde: %{y:,.2f} USDC<extra></extra>",
             )
-        )
-
-        # Referenslinje vid 100
-        fig.add_shape(
-            type="line",
-            x0=0, x1=1, xref="paper",
-            y0=100, y1=100, yref="y",
-            line=dict(color="#888888", width=1, dash="dash"),
         )
 
         fig.update_layout(
             title=dict(
-                text="Portföljutveckling – normaliserat till 100",
+                text="Portföljutveckling – totalt värde i USDC",
                 font=dict(size=20),
             ),
             xaxis_title="Datum/tid",
-            yaxis_title="Portföljindex (start = 100)",
+            yaxis_title="Portföljvärde (USDC)",
             template="plotly_dark",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=60, r=20, t=80, b=40),
