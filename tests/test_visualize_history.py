@@ -233,95 +233,164 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNone(result)
 
     # ------------------------------------------------------------------
-    # _build_performance_series
+    # _build_portfolio_performance
     # ------------------------------------------------------------------
 
-    def test_build_performance_series_all_starts_at_100(self):
+    def test_build_portfolio_performance_returns_empty_without_trades(self):
+        """Without any trades, holdings are zero → empty result."""
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        df = viz._read_history("BTC")
-        perf = viz._build_performance_series(df, "all")
+        dfs = {"BTC": viz._read_history("BTC")}
+        perf = viz._build_portfolio_performance([], dfs)
+        self.assertTrue(perf.empty)
+
+    def test_build_portfolio_performance_returns_empty_without_dfs(self):
+        viz = VisualizeHistory(self.cfg)
+        perf = viz._build_portfolio_performance([], {})
+        self.assertTrue(perf.empty)
+
+    def test_build_portfolio_performance_first_value_is_100(self):
+        """After a buy, first data point with holdings should be normalized to 100."""
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {
+                "symbol": "BTCUSDT", "isBuyer": True,
+                "qty": "0.01", "price": "40000",
+                "time": base_ms,  # at the very first candle
+            }
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
         self.assertFalse(perf.empty)
         self.assertIn("datetime", perf.columns)
-        self.assertIn("performance", perf.columns)
-        self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+        self.assertIn("portfolio_value", perf.columns)
+        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], 100.0)
 
-    def test_build_performance_series_week_starts_at_100(self):
+    def test_build_portfolio_performance_sell_reduces_holdings(self):
+        """After buying and then selling all, portfolio value should drop to 0."""
         hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        interval_ms = 3_600_000
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        df = viz._read_history("BTC")
-        perf = viz._build_performance_series(df, "week")
-        # Subset may be empty if the test data is within 7 days, but if not empty starts at 100
-        if not perf.empty:
-            self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+            # Sell all after 5 candles
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "40050", "time": base_ms + 5 * interval_ms},
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
+        # After selling all, the remaining data points should not be in the result
+        # (portfolio_value == 0 is filtered out)
+        last_dt = perf["datetime"].max()
+        expected_last = pd.Timestamp(
+            base_ms + 5 * interval_ms, unit="ms", tz="UTC"
+        )
+        self.assertLessEqual(last_dt, expected_last)
 
-    def test_build_performance_series_month_starts_at_100(self):
-        hist_dir = self.data_root / "history" / "BTC"
-        _create_history_csv(hist_dir, "BTC", n=50)
+    def test_build_portfolio_performance_multiple_currencies(self):
+        """Portfolio value sums contributions from multiple currencies."""
+        base_ms = 1_700_000_000_000
+        for currency in ["BTC", "ETH"]:
+            hist_dir = self.data_root / "history" / currency
+            _create_history_csv(hist_dir, currency, n=10)
         viz = VisualizeHistory(self.cfg)
-        df = viz._read_history("BTC")
-        perf = viz._build_performance_series(df, "month")
-        if not perf.empty:
-            self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
-
-    def test_build_performance_series_values_normalized_correctly(self):
-        """Check that performance values reflect correct ratio relative to start."""
-        hist_dir = self.data_root / "history" / "BTC"
-        _create_history_csv(hist_dir, "BTC", n=10)
-        viz = VisualizeHistory(self.cfg)
-        df = viz._read_history("BTC")
-        perf = viz._build_performance_series(df, "all")
+        dfs = {
+            "BTC": viz._read_history("BTC"),
+            "ETH": viz._read_history("ETH"),
+        }
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+            {"symbol": "ETHUSDT", "isBuyer": True, "qty": "1.0",
+             "price": "40000", "time": base_ms},
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
         self.assertFalse(perf.empty)
-        # First value must be 100
-        self.assertAlmostEqual(perf["performance"].iloc[0], 100.0)
-        # Last value: close[-1] / close[0] * 100
-        expected_last = (df["Close"].iloc[-1] / df["Close"].iloc[0]) * 100
-        self.assertAlmostEqual(perf["performance"].iloc[-1], expected_last)
-
-    def test_build_performance_series_empty_df_returns_empty(self):
-        viz = VisualizeHistory(self.cfg)
-        empty_df = pd.DataFrame(columns=["datetime", "Close"])
-        perf = viz._build_performance_series(empty_df, "all")
-        self.assertTrue(perf.empty)
-
-    def test_build_performance_series_zero_start_value_returns_empty(self):
-        import numpy as np
-        viz = VisualizeHistory(self.cfg)
-        df = pd.DataFrame({
-            "datetime": pd.to_datetime(["2023-01-01", "2023-01-02"]),
-            "Close": [0.0, 100.0],
-        })
-        perf = viz._build_performance_series(df, "all")
-        self.assertTrue(perf.empty)
+        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], 100.0)
 
     # ------------------------------------------------------------------
-    # generate_chart – performance subplot
+    # generate_portfolio_chart
     # ------------------------------------------------------------------
 
-    def test_generate_chart_contains_performance_traces(self):
-        """Verify the performance traces and reference line are embedded in the HTML."""
+    def test_generate_portfolio_chart_returns_none_without_trades(self):
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        html_content = viz.generate_chart("BTC", [])
-        self.assertIsNotNone(html_content)
-        # All three performance trace names should be present (unicode-escaped)
-        self.assertIn("Performance (allt)", html_content)
-        self.assertIn("Performance (vecka)", html_content)
-        self.assertIn("Performance (m\\u00e5nad)", html_content)
+        dfs = {"BTC": viz._read_history("BTC")}
+        result = viz.generate_portfolio_chart([], dfs)
+        self.assertIsNone(result)
 
-    def test_generate_chart_contains_updatemenus_buttons(self):
-        """Verify the updatemenus period-selection buttons are present."""
+    def test_generate_portfolio_chart_returns_html_with_trades(self):
         hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
-        html_content = viz.generate_chart("BTC", [])
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        html_content = viz.generate_portfolio_chart(trades, dfs)
         self.assertIsNotNone(html_content)
-        self.assertIn("updatemenus", html_content.lower())
+        self.assertIn("plotly", html_content.lower())
+        self.assertIn("chart-Portfolio", html_content)
+
+    def test_generate_portfolio_chart_has_rangeselector(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        html_content = viz.generate_portfolio_chart(trades, dfs)
+        self.assertIsNotNone(html_content)
+        self.assertIn("rangeselector", html_content.lower())
+        self.assertIn('"label":"Senaste veckan"', html_content)
         self.assertIn('"label":"Allt"', html_content)
 
+    # ------------------------------------------------------------------
+    # run – portfolio tab integration
+    # ------------------------------------------------------------------
+
+    def test_run_includes_portfolio_tab_when_trades_present(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        _create_trades_json(self.data_root / "trades", trades)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="tab-Portfolio"', content)
+        self.assertIn("vh-tab-portfolio", content)
+        self.assertIn("chart-Portfolio", content)
+
+    def test_run_omits_portfolio_tab_when_no_trades(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('id="tab-Portfolio"', content)
 
     def test_run_generates_all_charts(self):
         hist_dir = self.data_root / "history" / "BTC"
@@ -341,6 +410,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
         self.assertFalse(success)
+
+
 
 
 if __name__ == "__main__":
