@@ -124,8 +124,8 @@ class VisualizeHistory:
 
         Kolumner:
           datetime,
-          <valuta> för varje valuta i dfs (holdings),
-          USDC (innehav förankrat till aktuellt saldo från portfolio.json),
+          <valuta> för varje valuta i dfs (holdings) och USDC - alla förankrade till
+          aktuellt saldo från portfolio.json: pos_at_t = current - total_flow + cumflow_at_t,
           <valuta>USDC för varje valuta (holdings × close-pris),
           SUM (summan av alla USDC-värden)
 
@@ -156,6 +156,22 @@ class VisualizeHistory:
         positions: Dict[str, pd.Series] = {}
         price_series: Dict[str, pd.Series] = {}
 
+        # Läs portföljsaldo en gång – används för att förankra varje valuta
+        _portfolio_balances: Dict[str, float] = {}
+        portfolio_file = self.data_root / "portfolio" / "portfolio.json"
+        if portfolio_file.exists():
+            try:
+                with open(portfolio_file, "r", encoding="utf-8") as _pf:
+                    _portfolio_data = json.load(_pf)
+                for _asset, _info in _portfolio_data.get("balances", {}).items():
+                    try:
+                        _portfolio_balances[_asset.upper()] = float(_info.get("total", 0))
+                    except (ValueError, TypeError):
+                        pass
+                log.info("Läste portföljsaldon från portfolio.json: %s", list(_portfolio_balances.keys()))
+            except Exception as e:
+                log.warning("Kunde inte läsa portföljsaldon från portfolio.json: %s", e)
+
         for currency in currencies:
             df = dfs[currency]
             currency_upper = currency.upper()
@@ -163,6 +179,8 @@ class VisualizeHistory:
                 t for t in trades
                 if str(t.get("symbol", "")).upper().startswith(currency_upper)
             ]
+
+            current_balance = _portfolio_balances.get(currency_upper, 0.0)
 
             trade_events: List[tuple] = []
             for t in currency_trades:
@@ -185,17 +203,20 @@ class VisualizeHistory:
                     [e[1] for e in trade_events], index=trade_index, dtype=float
                 )
                 delta_series = delta_series.groupby(level=0).sum()
+                total_flow = float(delta_series.sum())
+                # Förankra till aktuellt saldo: pos_at_t = current - total_flow + cumflow_at_t
+                # => sista punkten = current_balance; tidigare punkter rekonstrueras bakåt.
                 combined_idx = idx.union(delta_series.index).sort_values()
-                pos_on_combined = (
-                    delta_series.reindex(combined_idx, fill_value=0.0).cumsum()
+                cumflow_on_combined = delta_series.reindex(combined_idx, fill_value=0.0).cumsum()
+                cumflow_at_idx = (
+                    cumflow_on_combined.reindex(idx, method="ffill").fillna(0.0)
                 )
-                pos_s = (
-                    pos_on_combined.reindex(idx, method="ffill")
-                    .fillna(0.0)
-                    .clip(lower=0.0)
+                pos_s = pd.Series(
+                    (current_balance - total_flow) + cumflow_at_idx.values,
+                    index=idx,
                 )
             else:
-                pos_s = pd.Series(0.0, index=idx)
+                pos_s = pd.Series(current_balance, index=idx)
 
             positions[currency_upper] = pos_s
             price_series[currency_upper] = (
@@ -204,23 +225,10 @@ class VisualizeHistory:
                 .fillna(0.0)
             )
 
-        # Läs aktuellt USDC-saldo från portfolio.json som ankarpunkt
-        current_usdc_balance = 0.0
-        portfolio_file = self.data_root / "portfolio" / "portfolio.json"
-        if portfolio_file.exists():
-            try:
-                with open(portfolio_file, "r", encoding="utf-8") as _pf:
-                    _portfolio_data = json.load(_pf)
-                _usdc_info = _portfolio_data.get("balances", {}).get("USDC")
-                if _usdc_info:
-                    current_usdc_balance = float(_usdc_info.get("total", 0))
-                log.info("Läste USDC-saldo från portfolio.json: %.8f", current_usdc_balance)
-            except Exception as e:
-                log.warning("Kunde inte läsa USDC-saldo från portfolio.json: %s", e)
-
         # Beräkna USDC-historik förankrad till aktuellt saldo.
         # Formel: usdc_vid_t = current_balance - sum(flöden efter t)
         #   => sista punkten ≈ current_balance; tidigare punkter rekonstrueras bakåt.
+        current_usdc_balance = _portfolio_balances.get("USDC", 0.0)
         usdc_events: List[tuple] = []
         for t in trades:
             symbol = str(t.get("symbol", "")).upper()

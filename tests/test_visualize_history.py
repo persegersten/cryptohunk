@@ -597,6 +597,67 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertAlmostEqual(last_usdc, current_usdc, places=6,
                                msg="Last USDC value must equal portfolio.json balance")
 
+    def test_write_debug_csv_currency_holdings_anchored_to_portfolio(self):
+        """Currency holdings should be anchored to portfolio.json current balance."""
+        base_ms = self._recent_base_ms(10)
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        # Current BNB balance as known from the exchange
+        current_bnb = 0.309
+        portfolio_dir = self.data_root / "portfolio"
+        portfolio_dir.mkdir(parents=True, exist_ok=True)
+        with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump({"balances": {"BNB": {"total": str(current_bnb)}, "USDC": {"total": "0.0"}}}, f)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+
+        # Simulate a trade history where the net bot activity totals 0.159 BNB,
+        # so the implied pre-existing (pre-bot) balance is 0.309 - 0.159 = 0.150 BNB.
+        # With the old cumsum-from-0 approach, each buy trade would push the running
+        # total above the current balance (doubling effect); with the anchor approach
+        # the last value must equal current_bnb (0.309) from portfolio.json.
+        initial_buy_ms = base_ms + 0 * 3_600_000
+        trades = [
+            # Bot buys 0.159 BNB
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.159",
+             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 1 * 3_600_000},
+            # Bot sells 0.159 BNB (take-profit)
+            {"symbol": "BNBUSDC", "isBuyer": False, "qty": "0.159",
+             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 3 * 3_600_000},
+            # Bot buys again
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.159",
+             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 5 * 3_600_000},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+        # Last BNB value must match portfolio.json current balance exactly
+        last_bnb = df["BNB"].iloc[-1]
+        self.assertAlmostEqual(last_bnb, current_bnb, places=6,
+                               msg="Last BNB value must equal portfolio.json balance")
+        # No row should show doubled BNB (i.e., no value > current_bnb + small tolerance)
+        self.assertTrue((df["BNB"] <= current_bnb + 0.001).all(),
+                        "BNB holdings should never exceed the known current balance")
+
 
 
 
