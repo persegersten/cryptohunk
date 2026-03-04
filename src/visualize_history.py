@@ -114,6 +114,156 @@ class VisualizeHistory:
             f"Tid: {time_str}"
         )
 
+    def _write_debug_csv(
+        self,
+        trades: List[Dict[str, Any]],
+        dfs: Dict[str, pd.DataFrame],
+    ) -> None:
+        """
+        Skriv en debug-CSV med per-valuta-innehav och USDC-värden för senaste veckan.
+
+        Kolumner:
+          datetime,
+          <valuta> för varje valuta i dfs (holdings),
+          USDC (innehav beräknat från trade quoteQty),
+          <valuta>USDC för varje valuta (holdings × close-pris),
+          SUM (summan av alla USDC-värden)
+
+        Sparas till DATA_AREA_ROOT_DIR/visualize/debug.csv.
+        """
+        if not dfs:
+            log.info("Ingen kursdata – debug-CSV skrivs inte")
+            return
+
+        # Bygg gemensamt tidsindex
+        idx: Optional[pd.DatetimeIndex] = None
+        for df in dfs.values():
+            dti = pd.DatetimeIndex(df["datetime"])
+            idx = dti if idx is None else idx.union(dti)
+        if idx is None or len(idx) == 0:
+            return
+        idx = idx.sort_values()
+
+        # Filtrera till senaste 7 dagarna
+        now = pd.Timestamp.now(tz="UTC")
+        week_ago = now - pd.Timedelta(days=7)
+        idx = idx[idx >= week_ago]
+        if len(idx) == 0:
+            log.info("Ingen prisdata för senaste veckan – debug-CSV skrivs inte")
+            return
+
+        currencies = sorted(dfs.keys())
+        positions: Dict[str, pd.Series] = {}
+        price_series: Dict[str, pd.Series] = {}
+
+        for currency in currencies:
+            df = dfs[currency]
+            currency_upper = currency.upper()
+            currency_trades = [
+                t for t in trades
+                if str(t.get("symbol", "")).upper().startswith(currency_upper)
+            ]
+
+            trade_events: List[tuple] = []
+            for t in currency_trades:
+                t_ms = t.get("time")
+                if not t_ms:
+                    continue
+                try:
+                    qty = float(t.get("qty", 0))
+                except (ValueError, TypeError):
+                    continue
+                if qty <= 0:
+                    continue
+                delta = qty if t.get("isBuyer", False) else -qty
+                trade_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
+
+            if trade_events:
+                trade_events.sort(key=lambda x: x[0])
+                trade_index = pd.DatetimeIndex([e[0] for e in trade_events])
+                delta_series = pd.Series(
+                    [e[1] for e in trade_events], index=trade_index, dtype=float
+                )
+                delta_series = delta_series.groupby(level=0).sum()
+                combined_idx = idx.union(delta_series.index).sort_values()
+                pos_on_combined = (
+                    delta_series.reindex(combined_idx, fill_value=0.0).cumsum()
+                )
+                pos_s = (
+                    pos_on_combined.reindex(idx, method="ffill")
+                    .fillna(0.0)
+                    .clip(lower=0.0)
+                )
+            else:
+                pos_s = pd.Series(0.0, index=idx)
+
+            positions[currency_upper] = pos_s
+            price_series[currency_upper] = (
+                df.set_index("datetime")["Close"]
+                .reindex(idx, method="ffill")
+                .fillna(0.0)
+            )
+
+        # Beräkna USDC-innehav från quoteQty i trades
+        usdc_events: List[tuple] = []
+        for t in trades:
+            symbol = str(t.get("symbol", "")).upper()
+            if not symbol.endswith("USDC"):
+                continue
+            t_ms = t.get("time")
+            if not t_ms:
+                continue
+            try:
+                quote_qty = float(t.get("quoteQty", 0))
+            except (ValueError, TypeError):
+                continue
+            if quote_qty <= 0:
+                continue
+            delta = quote_qty if not t.get("isBuyer", False) else -quote_qty
+            usdc_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
+
+        if usdc_events:
+            usdc_events.sort(key=lambda x: x[0])
+            usdc_index = pd.DatetimeIndex([e[0] for e in usdc_events])
+            usdc_delta = pd.Series(
+                [e[1] for e in usdc_events], index=usdc_index, dtype=float
+            )
+            usdc_delta = usdc_delta.groupby(level=0).sum()
+            combined_idx = idx.union(usdc_delta.index).sort_values()
+            usdc_pos: pd.Series = (
+                usdc_delta.reindex(combined_idx, fill_value=0.0)
+                .cumsum()
+                .reindex(idx, method="ffill")
+                .fillna(0.0)
+            )
+        else:
+            usdc_pos = pd.Series(0.0, index=idx)
+
+        # Bygg DataFrame
+        row_data: Dict[str, Any] = {"datetime": idx}
+        for c in currencies:
+            row_data[c.upper()] = positions[c.upper()].values
+        row_data["USDC"] = usdc_pos.values
+        for c in currencies:
+            c_upper = c.upper()
+            row_data[f"{c_upper}USDC"] = (
+                positions[c_upper] * price_series[c_upper]
+            ).values
+        sum_vals = usdc_pos.copy()
+        for c in currencies:
+            c_upper = c.upper()
+            sum_vals = sum_vals + positions[c_upper] * price_series[c_upper]
+        row_data["SUM"] = sum_vals.values
+
+        debug_df = pd.DataFrame(row_data)
+        self._ensure_dir(self.output_dir)
+        debug_file = self.output_dir / "debug.csv"
+        try:
+            debug_df.to_csv(debug_file, index=False)
+            log.info("Debug-CSV sparad: %s (%d rader)", debug_file, len(debug_df))
+        except Exception as e:
+            log.error("Fel vid sparande av debug-CSV: %s", e)
+
     def _build_portfolio_performance(
         self,
         trades: List[Dict[str, Any]],
@@ -604,6 +754,12 @@ class VisualizeHistory:
                     log.warning("Kunde inte generera diagram för %s", currency)
             except Exception as e:
                 log.error("Oväntat fel vid generering av diagram för %s: %s", currency, e)
+
+        # Skriv debug-CSV oavsett om diagram genererats
+        try:
+            self._write_debug_csv(trades, dfs)
+        except Exception as e:
+            log.error("Fel vid skrivning av debug-CSV: %s", e)
 
         if not charts:
             log.info(

@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import sys
@@ -44,9 +45,10 @@ def _make_cfg(data_root: str) -> Config:
     )
 
 
-def _create_history_csv(history_dir: Path, currency: str, n: int = 50) -> None:
+def _create_history_csv(history_dir: Path, currency: str, n: int = 50, base_ms: Optional[int] = None) -> None:
     """Skapa en minimal kurshistorikfil för testning."""
-    base_ms = 1_700_000_000_000  # 2023-11-14T22:13:20Z ungefär
+    if base_ms is None:
+        base_ms = 1_700_000_000_000  # 2023-11-14T22:13:20Z ungefär
     interval_ms = 3_600_000
     prices = [40000 + i * 10 for i in range(n)]
     data = {
@@ -422,6 +424,131 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
         self.assertFalse(success)
+
+    # ------------------------------------------------------------------
+    # _write_debug_csv
+    # ------------------------------------------------------------------
+
+    def _recent_base_ms(self, n: int = 50) -> int:
+        """Return a base timestamp so that the last n hourly candles fall within the last week."""
+        now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+        return now_ms - n * 3_600_000
+
+    def test_write_debug_csv_creates_file_with_correct_columns(self):
+        """_write_debug_csv should create debug.csv with expected columns."""
+        base_ms = self._recent_base_ms(50)
+        for currency in ["BNB", "ETH"]:
+            hist_dir = self.data_root / "history" / currency
+            _create_history_csv(hist_dir, currency, n=50, base_ms=base_ms)
+
+        cfg = Config(
+            currencies=["BNB", "ETH"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=50,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {
+            "BNB": viz._read_history("BNB"),
+            "ETH": viz._read_history("ETH"),
+        }
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "1.0",
+             "price": "300.0", "quoteQty": "300.0", "time": base_ms},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists(), "debug.csv was not created")
+        df = pd.read_csv(debug_file)
+        for col in ["datetime", "BNB", "ETH", "USDC", "BNBUSDC", "ETHUSDC", "SUM"]:
+            self.assertIn(col, df.columns, f"Column '{col}' missing from debug.csv")
+
+    def test_write_debug_csv_sum_equals_components(self):
+        """SUM column should equal the sum of all currency USDC value columns plus USDC holdings."""
+        base_ms = self._recent_base_ms(10)
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "2.0",
+             "price": "300.0", "quoteQty": "600.0", "time": base_ms},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+        # Dynamically find all <CURRENCY>USDC value columns
+        value_cols = [c for c in df.columns if c.endswith("USDC") and c != "USDC"]
+        for _, row in df.iterrows():
+            expected_sum = row["USDC"] + sum(row[c] for c in value_cols)
+            self.assertAlmostEqual(row["SUM"], expected_sum, places=6)
+
+    def test_write_debug_csv_not_created_for_old_data(self):
+        """If all history data is older than 7 days, debug.csv should not be written."""
+        hist_dir = self.data_root / "history" / "BNB"
+        # Use the old default base_ms (2023) which is definitely more than a week ago
+        _create_history_csv(hist_dir, "BNB", n=10)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        viz._write_debug_csv([], dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertFalse(debug_file.exists(), "debug.csv should not be created for old data")
+
+    def test_run_writes_debug_csv_with_recent_data(self):
+        """run() should write debug.csv when recent price history is available."""
+        base_ms = self._recent_base_ms(50)
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50, base_ms=base_ms)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists(), "debug.csv should be written by run()")
 
 
 
