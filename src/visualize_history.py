@@ -125,7 +125,7 @@ class VisualizeHistory:
         Kolumner:
           datetime,
           <valuta> för varje valuta i dfs (holdings),
-          USDC (innehav beräknat från trade quoteQty),
+          USDC (innehav förankrat till aktuellt saldo från portfolio.json),
           <valuta>USDC för varje valuta (holdings × close-pris),
           SUM (summan av alla USDC-värden)
 
@@ -204,7 +204,23 @@ class VisualizeHistory:
                 .fillna(0.0)
             )
 
-        # Beräkna USDC-innehav från quoteQty i trades
+        # Läs aktuellt USDC-saldo från portfolio.json som ankarpunkt
+        current_usdc_balance = 0.0
+        portfolio_file = self.data_root / "portfolio" / "portfolio.json"
+        if portfolio_file.exists():
+            try:
+                with open(portfolio_file, "r", encoding="utf-8") as _pf:
+                    _portfolio_data = json.load(_pf)
+                _usdc_info = _portfolio_data.get("balances", {}).get("USDC")
+                if _usdc_info:
+                    current_usdc_balance = float(_usdc_info.get("total", 0))
+                log.info("Läste USDC-saldo från portfolio.json: %.8f", current_usdc_balance)
+            except Exception as e:
+                log.warning("Kunde inte läsa USDC-saldo från portfolio.json: %s", e)
+
+        # Beräkna USDC-historik förankrad till aktuellt saldo.
+        # Formel: usdc_vid_t = current_balance - sum(flöden efter t)
+        #   => sista punkten ≈ current_balance; tidigare punkter rekonstrueras bakåt.
         usdc_events: List[tuple] = []
         for t in trades:
             symbol = str(t.get("symbol", "")).upper()
@@ -219,6 +235,7 @@ class VisualizeHistory:
                 continue
             if quote_qty <= 0:
                 continue
+            # Köp krypto → USDC minskar; sälj krypto → USDC ökar
             delta = quote_qty if not t.get("isBuyer", False) else -quote_qty
             usdc_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
 
@@ -229,15 +246,21 @@ class VisualizeHistory:
                 [e[1] for e in usdc_events], index=usdc_index, dtype=float
             )
             usdc_delta = usdc_delta.groupby(level=0).sum()
+            total_usdc_flow = float(usdc_delta.sum())
+            # starting_balance = current_balance - total_flow
+            # usdc_at_t = starting_balance + cumulative_flow_at_t
+            #           = current_balance - total_flow + cumflow_at_idx
             combined_idx = idx.union(usdc_delta.index).sort_values()
-            usdc_pos: pd.Series = (
-                usdc_delta.reindex(combined_idx, fill_value=0.0)
-                .cumsum()
-                .reindex(idx, method="ffill")
-                .fillna(0.0)
+            cumflow_on_combined = usdc_delta.reindex(combined_idx, fill_value=0.0).cumsum()
+            cumflow_at_idx = (
+                cumflow_on_combined.reindex(idx, method="ffill").fillna(0.0)
+            )
+            usdc_pos: pd.Series = pd.Series(
+                (current_usdc_balance - total_usdc_flow) + cumflow_at_idx.values,
+                index=idx,
             )
         else:
-            usdc_pos = pd.Series(0.0, index=idx)
+            usdc_pos = pd.Series(current_usdc_balance, index=idx)
 
         # Bygg DataFrame
         row_data: Dict[str, Any] = {"datetime": idx}

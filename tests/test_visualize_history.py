@@ -550,6 +550,53 @@ class TestVisualizeHistory(unittest.TestCase):
         debug_file = self.data_root / "visualize" / "debug.csv"
         self.assertTrue(debug_file.exists(), "debug.csv should be written by run()")
 
+    def test_write_debug_csv_usdc_anchored_to_portfolio_balance(self):
+        """USDC column should be anchored to the current balance from portfolio.json."""
+        base_ms = self._recent_base_ms(10)
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        # Write a portfolio.json with a known USDC balance
+        current_usdc = 0.04460852
+        portfolio_dir = self.data_root / "portfolio"
+        portfolio_dir.mkdir(parents=True, exist_ok=True)
+        with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump({"balances": {"USDC": {"total": str(current_usdc)}}}, f)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        # Simulate many buy trades that would have made USDC very negative with the old logic
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.5",
+             "price": "300.0", "quoteQty": "150.0",
+             "time": base_ms + i * 3_600_000}
+            for i in range(5)
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+        # The last row should show the current USDC balance (net of all flows)
+        last_usdc = df["USDC"].iloc[-1]
+        self.assertAlmostEqual(last_usdc, current_usdc, places=6,
+                               msg="Last USDC value must equal portfolio.json balance")
+
 
 
 
