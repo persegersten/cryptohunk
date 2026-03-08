@@ -597,13 +597,25 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertAlmostEqual(last_usdc, current_usdc, places=6,
                                msg="Last USDC value must equal portfolio.json balance")
 
-    def test_write_debug_csv_currency_holdings_anchored_to_portfolio(self):
-        """Currency holdings should be anchored to portfolio.json current balance."""
-        base_ms = self._recent_base_ms(10)
+    def test_write_debug_csv_backward_reconstruction_correct_candle(self):
+        """
+        Holdings history must be reconstructed by walking backwards from portfolio.json.
+
+        Starting from the current known balance, each trade's net flow is undone to
+        recover the balance at each prior candle.  A buy at candle T must appear in
+        candle T (not T+1), and the balance in candles before that buy must be lower.
+        """
+        # Use an hour-aligned base so that floor('h') maps trades to exactly the
+        # expected candle index (Binance klines are always on UTC-hour boundaries).
+        hour_ms = 3_600_000
+        now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+        base_ms = (now_ms // hour_ms - 10) * hour_ms  # aligned to UTC-hour boundary
+
         hist_dir = self.data_root / "history" / "BNB"
         _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
 
-        # Current BNB balance as known from the exchange
+        # Current BNB balance as known from the exchange.
+        # Implied pre-bot balance: 0.309 - 0.159 = 0.150 BNB.
         current_bnb = 0.309
         portfolio_dir = self.data_root / "portfolio"
         portfolio_dir.mkdir(parents=True, exist_ok=True)
@@ -628,35 +640,34 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(cfg)
         dfs = {"BNB": viz._read_history("BNB")}
 
-        # Simulate a trade history where the net bot activity totals 0.159 BNB,
-        # so the implied pre-existing (pre-bot) balance is 0.309 - 0.159 = 0.150 BNB.
-        # With the old cumsum-from-0 approach, each buy trade would push the running
-        # total above the current balance (doubling effect); with the anchor approach
-        # the last value must equal current_bnb (0.309) from portfolio.json.
-        initial_buy_ms = base_ms + 0 * 3_600_000
+        # One buy 15 minutes into candle index 2 (base_ms + 2h + 15min).
+        # floor('h') maps this to exactly base_ms + 2h = candle index 2.
+        buy_ms = base_ms + 2 * hour_ms + 15 * 60 * 1000
         trades = [
-            # Bot buys 0.159 BNB
             {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.159",
-             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 1 * 3_600_000},
-            # Bot sells 0.159 BNB (take-profit)
-            {"symbol": "BNBUSDC", "isBuyer": False, "qty": "0.159",
-             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 3 * 3_600_000},
-            # Bot buys again
-            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.159",
-             "price": "622.0", "quoteQty": "98.9", "time": initial_buy_ms + 5 * 3_600_000},
+             "price": "622.0", "quoteQty": "98.9", "time": buy_ms},
         ]
         viz._write_debug_csv(trades, dfs)
 
         debug_file = self.data_root / "visualize" / "debug.csv"
         self.assertTrue(debug_file.exists())
         df = pd.read_csv(debug_file)
-        # Last BNB value must match portfolio.json current balance exactly
-        last_bnb = df["BNB"].iloc[-1]
-        self.assertAlmostEqual(last_bnb, current_bnb, places=6,
+
+        # Last BNB value must match portfolio.json (0.309)
+        self.assertAlmostEqual(df["BNB"].iloc[-1], current_bnb, places=6,
                                msg="Last BNB value must equal portfolio.json balance")
-        # No row should show doubled BNB (i.e., no value > current_bnb + small tolerance)
-        self.assertTrue((df["BNB"] <= current_bnb + 0.001).all(),
-                        "BNB holdings should never exceed the known current balance")
+
+        # Candles before the buy (index 0 and 1) must show the pre-buy balance (0.150)
+        pre_buy_balance = current_bnb - 0.159
+        self.assertAlmostEqual(df["BNB"].iloc[0], pre_buy_balance, places=6,
+                               msg="First candle must reflect pre-buy balance")
+        self.assertAlmostEqual(df["BNB"].iloc[1], pre_buy_balance, places=6,
+                               msg="Candle before the buy must reflect pre-buy balance")
+
+        # The buy candle (index 2) and all later candles must show the post-buy balance
+        for row_idx in range(2, len(df)):
+            self.assertAlmostEqual(df["BNB"].iloc[row_idx], current_bnb, places=6,
+                                   msg=f"Row {row_idx} must reflect post-buy balance")
 
 
 

@@ -114,6 +114,51 @@ class VisualizeHistory:
             f"Tid: {time_str}"
         )
 
+    @staticmethod
+    def _reconstruct_balance_history(
+        current_balance: float,
+        trade_events: List[tuple],
+        idx: pd.DatetimeIndex,
+    ) -> pd.Series:
+        """
+        Rekonstruera balanshistorik bakåt från aktuellt saldo.
+
+        Startar från current_balance (känt korrekt värde från portfolio.json) och
+        går bakåt i tid – varje candles nettoflöde "ångras" för att ge balansen vid
+        slutet av den föregående candle'n.
+
+        Trades binnas till sin timkandle via floor('h'), så en affär kl. 20:15
+        tillhör 20:00-candle'n och visas som en förändring i den candle'n.
+
+        Returnerar en Series med stigande tidsindex som matchar idx.
+        """
+        # Bin varje affär till sin timkandle
+        hourly_flow: Dict[pd.Timestamp, float] = {}
+        for ts, delta in trade_events:
+            candle = ts.floor("h")
+            hourly_flow[candle] = hourly_flow.get(candle, 0.0) + delta
+
+        # Dra av flöden från affärer som inträffade EFTER sista candle'n i fönstret
+        # (dessa finns i trades.json men utanför vår 7-dagarsperiod).
+        if len(idx) > 0:
+            last_candle = idx[-1]
+            post_window_flow = sum(
+                v for k, v in hourly_flow.items() if k > last_candle
+            )
+        else:
+            post_window_flow = 0.0
+
+        # Gå bakåt genom alla candles och rekonstruera saldo
+        balances: Dict[pd.Timestamp, float] = {}
+        running_balance = current_balance - post_window_flow
+        for candle_time in reversed(idx):
+            # Saldo vid slutet av denna candle (efter affärer som skedde under candle'n)
+            balances[candle_time] = running_balance
+            # Ångra affärerna i denna candle för att få saldo vid slutet av föregående candle
+            running_balance -= hourly_flow.get(candle_time, 0.0)
+
+        return pd.Series(balances, index=idx)
+
     def _write_debug_csv(
         self,
         trades: List[Dict[str, Any]],
@@ -124,8 +169,8 @@ class VisualizeHistory:
 
         Kolumner:
           datetime,
-          <valuta> för varje valuta i dfs (holdings) och USDC - alla förankrade till
-          aktuellt saldo från portfolio.json: pos_at_t = current - total_flow + cumflow_at_t,
+          <valuta> för varje valuta i dfs och USDC – alla rekonstruerade bakåt från
+          aktuellt saldo i portfolio.json via _reconstruct_balance_history,
           <valuta>USDC för varje valuta (holdings × close-pris),
           SUM (summan av alla USDC-värden)
 
@@ -197,23 +242,8 @@ class VisualizeHistory:
                 trade_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
 
             if trade_events:
-                trade_events.sort(key=lambda x: x[0])
-                trade_index = pd.DatetimeIndex([e[0] for e in trade_events])
-                delta_series = pd.Series(
-                    [e[1] for e in trade_events], index=trade_index, dtype=float
-                )
-                delta_series = delta_series.groupby(level=0).sum()
-                total_flow = float(delta_series.sum())
-                # Förankra till aktuellt saldo: pos_at_t = current - total_flow + cumflow_at_t
-                # => sista punkten = current_balance; tidigare punkter rekonstrueras bakåt.
-                combined_idx = idx.union(delta_series.index).sort_values()
-                cumflow_on_combined = delta_series.reindex(combined_idx, fill_value=0.0).cumsum()
-                cumflow_at_idx = (
-                    cumflow_on_combined.reindex(idx, method="ffill").fillna(0.0)
-                )
-                pos_s = pd.Series(
-                    (current_balance - total_flow) + cumflow_at_idx.values,
-                    index=idx,
+                pos_s = self._reconstruct_balance_history(
+                    current_balance, trade_events, idx
                 )
             else:
                 pos_s = pd.Series(current_balance, index=idx)
@@ -248,24 +278,8 @@ class VisualizeHistory:
             usdc_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
 
         if usdc_events:
-            usdc_events.sort(key=lambda x: x[0])
-            usdc_index = pd.DatetimeIndex([e[0] for e in usdc_events])
-            usdc_delta = pd.Series(
-                [e[1] for e in usdc_events], index=usdc_index, dtype=float
-            )
-            usdc_delta = usdc_delta.groupby(level=0).sum()
-            total_usdc_flow = float(usdc_delta.sum())
-            # starting_balance = current_balance - total_flow
-            # usdc_at_t = starting_balance + cumulative_flow_at_t
-            #           = current_balance - total_flow + cumflow_at_idx
-            combined_idx = idx.union(usdc_delta.index).sort_values()
-            cumflow_on_combined = usdc_delta.reindex(combined_idx, fill_value=0.0).cumsum()
-            cumflow_at_idx = (
-                cumflow_on_combined.reindex(idx, method="ffill").fillna(0.0)
-            )
-            usdc_pos: pd.Series = pd.Series(
-                (current_usdc_balance - total_usdc_flow) + cumflow_at_idx.values,
-                index=idx,
+            usdc_pos: pd.Series = self._reconstruct_balance_history(
+                current_usdc_balance, usdc_events, idx
             )
         else:
             usdc_pos = pd.Series(current_usdc_balance, index=idx)
