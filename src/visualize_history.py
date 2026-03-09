@@ -522,7 +522,7 @@ class VisualizeHistory:
         return fig.to_html(
             full_html=False,
             include_plotlyjs=False,
-            div_id="chart-Portfolio",
+            div_id="chart-Performance",
         )
 
     def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> Optional[str]:
@@ -691,12 +691,12 @@ class VisualizeHistory:
     def _build_combined_html(self, charts: Dict[str, str]) -> str:
         """Bygg kombinerat HTML-dokument med flikar för valutaval."""
         # Separera valutaflikar från portföljfliken
-        currency_keys = [c for c in charts if c != "Portfolio"]
-        has_portfolio = "Portfolio" in charts
-        all_keys = currency_keys + (["Portfolio"] if has_portfolio else [])
+        currency_keys = [c for c in charts if c != "Performance"]
+        has_portfolio = "Performance" in charts
+        all_keys = currency_keys + (["Performance"] if has_portfolio else [])
 
         def _tab_button(c: str, active: bool) -> str:
-            extra_class = " vh-tab-portfolio" if c == "Portfolio" else ""
+            extra_class = " vh-tab-portfolio" if c == "Performance" else ""
             active_class = " vh-tab-active" if active else ""
             return (
                 '<button class="vh-tab{extra}{active}" id="tab-{c}" '
@@ -740,7 +740,7 @@ class VisualizeHistory:
             "var _currencies = [" + key_json + "];\n"
             "function _tabClass(x, active) {\n"
             "  var cls = 'vh-tab';\n"
-            "  if (x === 'Portfolio') cls += ' vh-tab-portfolio';\n"
+            "  if (x === 'Performance') cls += ' vh-tab-portfolio';\n"
             "  if (active) cls += ' vh-tab-active';\n"
             "  return cls;\n"
             "}\n"
@@ -848,7 +848,7 @@ class VisualizeHistory:
         try:
             portfolio_div = self.generate_portfolio_chart(trades, dfs)
             if portfolio_div is not None:
-                charts["Portfolio"] = portfolio_div
+                charts["Performance"] = portfolio_div
                 log.info("Portföljdiagram genererat")
             else:
                 log.info("Inget portföljdiagram genererat (inga trades med innehav)")
@@ -869,7 +869,7 @@ class VisualizeHistory:
 
         log.info(
             "VisualizeHistory klar: %d/%d valutadiagram genererade",
-            len([c for c in charts if c != "Portfolio"]),
+            len([c for c in charts if c != "Performance"]),
             len(self.cfg.currencies),
         )
         return True

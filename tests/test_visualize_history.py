@@ -373,7 +373,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_portfolio_chart(trades, dfs)
         self.assertIsNotNone(html_content)
         self.assertIn("plotly", html_content.lower())
-        self.assertIn("chart-Portfolio", html_content)
+        self.assertIn("chart-Performance", html_content)
 
     def test_generate_portfolio_chart_has_rangeselector(self):
         hist_dir = self.data_root / "history" / "BTC"
@@ -414,9 +414,9 @@ class TestVisualizeHistory(unittest.TestCase):
         content = (self.data_root / "visualize" / "history_chart.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn('id="tab-Portfolio"', content)
+        self.assertIn('id="tab-Performance"', content)
         self.assertIn("vh-tab-portfolio", content)
-        self.assertIn("chart-Portfolio", content)
+        self.assertIn("chart-Performance", content)
 
     def test_run_omits_portfolio_tab_when_no_trades(self):
         hist_dir = self.data_root / "history" / "BTC"
@@ -427,7 +427,7 @@ class TestVisualizeHistory(unittest.TestCase):
         content = (self.data_root / "visualize" / "history_chart.html").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn('id="tab-Portfolio"', content)
+        self.assertNotIn('id="tab-Performance"', content)
 
     def test_run_generates_all_charts(self):
         hist_dir = self.data_root / "history" / "BTC"
