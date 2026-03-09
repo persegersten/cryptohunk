@@ -623,7 +623,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-up",
                             size=14,
-                            color="#3d9960",
+                            color="#00c853",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=buy_labels,
@@ -643,7 +643,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-down",
                             size=14,
-                            color="#a84040",
+                            color="#d50000",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=sell_labels,
