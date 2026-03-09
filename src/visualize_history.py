@@ -560,8 +560,8 @@ class VisualizeHistory:
                 low=df["Low"],
                 close=df["Close"],
                 name="Kurs",
-                increasing_line_color="#26a69a",
-                decreasing_line_color="#ef5350",
+                increasing_line_color="#4d8a85",
+                decreasing_line_color="#c97474",
             ),
             row=1, col=1,
         )
@@ -623,7 +623,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-up",
                             size=14,
-                            color="#00c853",
+                            color="#3d9960",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=buy_labels,
@@ -643,7 +643,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-down",
                             size=14,
-                            color="#d50000",
+                            color="#a84040",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=sell_labels,
