@@ -2,21 +2,16 @@
 # Enkel wrapper för att köra CryptoHunk2.0 från kommandoraden.
 # Exempel:
 export CURRENCIES="BNB,ETH,SOL"
-export BINANCE_KEY="iSN0LV27EdJlR3IqdYDkY9N2dlmySiEsOUGSxetVdOQn1iTCrEasTBe9yywSa4xQ"
-export BINANCE_SECRET="qikx2QeAYxDUDQpROjKEoi4TQg5f2vVCn4fKXflfv5yPnyHr4gzfhK2jjogu2RAc"
-export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
-export DATA_AREA_ROOT_DIR="/home/perseg/dev/cryptotrader/tmp/cryptohunk_data"
-export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="1000"
 export TRADE_THRESHOLD="10"
 export DRY_RUN="false"
 export TAKE_PROFIT_PERCENTAGE="10.0"
 export STOP_LOSS_PERCENTAGE="6.0"
 
-export FTP_HOST="ftp.domeneshop.no"
-export FTP_DIR="www/cryptohunk"
-export FTP_USERNAME="segersten"
-export FTP_PASSWORD="dosera-Wi-rams-11-eiss"
+export FTP_HOST="din_ftp"
+export FTP_DIR="din_target_folder"
+export FTP_USERNAME="ditt_ftp_username"
+export FTP_PASSWORD="ditt_ftp_password"
 export FTP_HTML_REGEXP=".*history_chart\.html$"
 
 #
