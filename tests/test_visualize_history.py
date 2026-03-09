@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import sys
@@ -44,9 +45,10 @@ def _make_cfg(data_root: str) -> Config:
     )
 
 
-def _create_history_csv(history_dir: Path, currency: str, n: int = 50) -> None:
+def _create_history_csv(history_dir: Path, currency: str, n: int = 50, base_ms: Optional[int] = None) -> None:
     """Skapa en minimal kurshistorikfil för testning."""
-    base_ms = 1_700_000_000_000  # 2023-11-14T22:13:20Z ungefär
+    if base_ms is None:
+        base_ms = 1_700_000_000_000  # 2023-11-14T22:13:20Z ungefär
     interval_ms = 3_600_000
     prices = [40000 + i * 10 for i in range(n)]
     data = {
@@ -71,6 +73,15 @@ def _create_trades_json(trades_dir: Path, trades: list) -> None:
     trades_dir.mkdir(parents=True, exist_ok=True)
     with open(trades_dir / "trades.json", "w", encoding="utf-8") as f:
         json.dump(trades, f)
+
+
+def _create_portfolio_json(data_root: Path, balances: dict) -> None:
+    """Create a minimal portfolio.json anchoring backward-reconstruction tests."""
+    portfolio_dir = data_root / "portfolio"
+    portfolio_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"balances": {k: {"total": str(v)} for k, v in balances.items()}}
+    with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f)
 
 
 class TestVisualizeHistory(unittest.TestCase):
@@ -233,8 +244,190 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNone(result)
 
     # ------------------------------------------------------------------
-    # run
+    # _build_portfolio_performance
     # ------------------------------------------------------------------
+
+    def test_build_portfolio_performance_returns_empty_without_trades(self):
+        """Without any trades, holdings are zero → empty result."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        perf = viz._build_portfolio_performance([], dfs)
+        self.assertTrue(perf.empty)
+
+    def test_build_portfolio_performance_returns_empty_without_dfs(self):
+        viz = VisualizeHistory(self.cfg)
+        perf = viz._build_portfolio_performance([], {})
+        self.assertTrue(perf.empty)
+
+    def test_build_portfolio_performance_first_value_is_usdc(self):
+        """After a buy, first data point with holdings should equal qty × close_price in USDC."""
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        expected_qty = 0.01
+        expected_first_price = 40000  # _create_history_csv: prices[0] = 40000 + 0*10
+        _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to the current BTC balance from portfolio.json
+        _create_portfolio_json(self.data_root, {"BTC": expected_qty})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {
+                "symbol": "BTCUSDT", "isBuyer": True,
+                "qty": str(expected_qty), "price": str(expected_first_price),
+                "time": base_ms,  # at the very first candle
+            }
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
+        self.assertFalse(perf.empty)
+        self.assertIn("datetime", perf.columns)
+        self.assertIn("portfolio_value", perf.columns)
+        self.assertAlmostEqual(
+            perf["portfolio_value"].iloc[0],
+            expected_qty * expected_first_price,
+            places=4,
+        )
+
+    def test_build_portfolio_performance_sell_reduces_holdings(self):
+        """After buying and then selling all, portfolio value should drop to 0."""
+        hist_dir = self.data_root / "history" / "BTC"
+        # Use an hour-aligned base so that floor('h') maps trades to exactly the
+        # expected candle index (Binance klines are always on UTC-hour boundaries).
+        base_ms = 1_699_999_200_000  # 2023-11-14 22:00:00 UTC
+        interval_ms = 3_600_000
+        _create_history_csv(hist_dir, "BTC", n=50, base_ms=base_ms)
+        # After buying and then selling the full qty, the current balance is 0
+        _create_portfolio_json(self.data_root, {"BTC": 0.0})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+            # Sell all after 5 candles
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "40050", "time": base_ms + 5 * interval_ms},
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
+        # After selling all, the remaining data points should not be in the result
+        # (portfolio_value == 0 is filtered out)
+        last_dt = perf["datetime"].max()
+        expected_last = pd.Timestamp(
+            base_ms + 5 * interval_ms, unit="ms", tz="UTC"
+        )
+        self.assertLessEqual(last_dt, expected_last)
+
+    def test_build_portfolio_performance_multiple_currencies(self):
+        """Portfolio value sums contributions from multiple currencies."""
+        base_ms = 1_700_000_000_000
+        # _create_history_csv: prices[0] = 40000 + 0*10 = 40000 for both currencies
+        btc_qty = 0.01
+        eth_qty = 1.0
+        first_price = 40000
+        expected_first_value = btc_qty * first_price + eth_qty * first_price
+        for currency in ["BTC", "ETH"]:
+            hist_dir = self.data_root / "history" / currency
+            _create_history_csv(hist_dir, currency, n=10)
+        # Anchor backward reconstruction to current balances from portfolio.json
+        _create_portfolio_json(self.data_root, {"BTC": btc_qty, "ETH": eth_qty})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {
+            "BTC": viz._read_history("BTC"),
+            "ETH": viz._read_history("ETH"),
+        }
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": str(btc_qty),
+             "price": str(first_price), "time": base_ms},
+            {"symbol": "ETHUSDT", "isBuyer": True, "qty": str(eth_qty),
+             "price": str(first_price), "time": base_ms},
+        ]
+        perf = viz._build_portfolio_performance(trades, dfs)
+        self.assertFalse(perf.empty)
+        # First value should be the actual combined USDC value, not 100
+        self.assertAlmostEqual(perf["portfolio_value"].iloc[0], expected_first_value, places=2)
+
+    # ------------------------------------------------------------------
+    # generate_portfolio_chart
+    # ------------------------------------------------------------------
+
+    def test_generate_portfolio_chart_returns_none_without_trades(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        result = viz.generate_portfolio_chart([], dfs)
+        self.assertIsNone(result)
+
+    def test_generate_portfolio_chart_returns_html_with_trades(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to current balance
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        html_content = viz.generate_portfolio_chart(trades, dfs)
+        self.assertIsNotNone(html_content)
+        self.assertIn("plotly", html_content.lower())
+        self.assertIn("chart-Performance", html_content)
+
+    def test_generate_portfolio_chart_has_rangeselector(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to current balance
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        html_content = viz.generate_portfolio_chart(trades, dfs)
+        self.assertIsNotNone(html_content)
+        self.assertIn("rangeselector", html_content.lower())
+        self.assertIn('"label":"Senaste veckan"', html_content)
+        self.assertIn('"label":"Allt"', html_content)
+
+    # ------------------------------------------------------------------
+    # run – portfolio tab integration
+    # ------------------------------------------------------------------
+
+    def test_run_includes_portfolio_tab_when_trades_present(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        base_ms = 1_700_000_000_000
+        _create_history_csv(hist_dir, "BTC", n=50)
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "time": base_ms},
+        ]
+        _create_trades_json(self.data_root / "trades", trades)
+        # Anchor backward reconstruction so the portfolio chart is non-empty
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="tab-Performance"', content)
+        self.assertIn("vh-tab-portfolio", content)
+        self.assertIn("chart-Performance", content)
+
+    def test_run_omits_portfolio_tab_when_no_trades(self):
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('id="tab-Performance"', content)
 
     def test_run_generates_all_charts(self):
         hist_dir = self.data_root / "history" / "BTC"
@@ -254,6 +447,252 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
         self.assertFalse(success)
+
+    # ------------------------------------------------------------------
+    # _write_debug_csv
+    # ------------------------------------------------------------------
+
+    def _recent_base_ms(self, n: int = 50) -> int:
+        """Return a base timestamp so that the last n hourly candles fall within the last week."""
+        now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+        return now_ms - n * 3_600_000
+
+    def test_write_debug_csv_creates_file_with_correct_columns(self):
+        """_write_debug_csv should create debug.csv with expected columns."""
+        base_ms = self._recent_base_ms(50)
+        for currency in ["BNB", "ETH"]:
+            hist_dir = self.data_root / "history" / currency
+            _create_history_csv(hist_dir, currency, n=50, base_ms=base_ms)
+
+        cfg = Config(
+            currencies=["BNB", "ETH"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=50,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {
+            "BNB": viz._read_history("BNB"),
+            "ETH": viz._read_history("ETH"),
+        }
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "1.0",
+             "price": "300.0", "quoteQty": "300.0", "time": base_ms},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists(), "debug.csv was not created")
+        df = pd.read_csv(debug_file)
+        for col in ["datetime", "BNB", "ETH", "USDC", "BNBUSDC", "ETHUSDC", "SUM"]:
+            self.assertIn(col, df.columns, f"Column '{col}' missing from debug.csv")
+
+    def test_write_debug_csv_sum_equals_components(self):
+        """SUM column should equal the sum of all currency USDC value columns plus USDC holdings."""
+        base_ms = self._recent_base_ms(10)
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "2.0",
+             "price": "300.0", "quoteQty": "600.0", "time": base_ms},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+        # Dynamically find all <CURRENCY>USDC value columns
+        value_cols = [c for c in df.columns if c.endswith("USDC") and c != "USDC"]
+        for _, row in df.iterrows():
+            expected_sum = row["USDC"] + sum(row[c] for c in value_cols)
+            self.assertAlmostEqual(row["SUM"], expected_sum, places=6)
+
+    def test_write_debug_csv_not_created_for_old_data(self):
+        """If all history data is older than 7 days, debug.csv should not be written."""
+        hist_dir = self.data_root / "history" / "BNB"
+        # Use the old default base_ms (2023) which is definitely more than a week ago
+        _create_history_csv(hist_dir, "BNB", n=10)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        viz._write_debug_csv([], dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertFalse(debug_file.exists(), "debug.csv should not be created for old data")
+
+    def test_run_writes_debug_csv_with_recent_data(self):
+        """run() should write debug.csv when recent price history is available."""
+        base_ms = self._recent_base_ms(50)
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50, base_ms=base_ms)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists(), "debug.csv should be written by run()")
+
+    def test_write_debug_csv_usdc_anchored_to_portfolio_balance(self):
+        """USDC column should be anchored to the current balance from portfolio.json."""
+        base_ms = self._recent_base_ms(10)
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        # Write a portfolio.json with a known USDC balance
+        current_usdc = 0.04460852
+        portfolio_dir = self.data_root / "portfolio"
+        portfolio_dir.mkdir(parents=True, exist_ok=True)
+        with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump({"balances": {"USDC": {"total": str(current_usdc)}}}, f)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+        # Simulate many buy trades that would have made USDC very negative with the old logic
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.5",
+             "price": "300.0", "quoteQty": "150.0",
+             "time": base_ms + i * 3_600_000}
+            for i in range(5)
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+        # The last row should show the current USDC balance (net of all flows)
+        last_usdc = df["USDC"].iloc[-1]
+        self.assertAlmostEqual(last_usdc, current_usdc, places=6,
+                               msg="Last USDC value must equal portfolio.json balance")
+
+    def test_write_debug_csv_backward_reconstruction_correct_candle(self):
+        """
+        Holdings history must be reconstructed by walking backwards from portfolio.json.
+
+        Starting from the current known balance, each trade's net flow is undone to
+        recover the balance at each prior candle.  A buy at candle T must appear in
+        candle T (not T+1), and the balance in candles before that buy must be lower.
+        """
+        # Use an hour-aligned base so that floor('h') maps trades to exactly the
+        # expected candle index (Binance klines are always on UTC-hour boundaries).
+        hour_ms = 3_600_000
+        now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+        base_ms = (now_ms // hour_ms - 10) * hour_ms  # aligned to UTC-hour boundary
+
+        hist_dir = self.data_root / "history" / "BNB"
+        _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
+
+        # Current BNB balance as known from the exchange.
+        # Implied pre-bot balance: 0.309 - 0.159 = 0.150 BNB.
+        current_bnb = 0.309
+        portfolio_dir = self.data_root / "portfolio"
+        portfolio_dir.mkdir(parents=True, exist_ok=True)
+        with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+            json.dump({"balances": {"BNB": {"total": str(current_bnb)}, "USDC": {"total": "0.0"}}}, f)
+
+        cfg = Config(
+            currencies=["BNB"],
+            binance_secret="s", binance_key="k",
+            binance_base_url="https://api.binance.com",
+            binance_currency_history_endpoint="/api/v3/klines",
+            binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+            binance_my_trades_endpoint="/api/v3/myTrades",
+            binance_trading_url="https://api.binance.com/api/v3/order",
+            dry_run=True, data_area_root_dir=self.test_dir,
+            currency_history_period="1h", currency_history_nof_elements=10,
+            trade_threshold=10.0, take_profit_percentage=10.0,
+            stop_loss_percentage=6.0, allowed_quote_assets=["USDC"],
+            ftp_host=None, ftp_dir=None, ftp_username=None,
+            ftp_password=None, ftp_html_regexp=None, raw_env={},
+        )
+        viz = VisualizeHistory(cfg)
+        dfs = {"BNB": viz._read_history("BNB")}
+
+        # One buy 15 minutes into candle index 2 (base_ms + 2h + 15min).
+        # floor('h') maps this to exactly base_ms + 2h = candle index 2.
+        buy_ms = base_ms + 2 * hour_ms + 15 * 60 * 1000
+        trades = [
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.159",
+             "price": "622.0", "quoteQty": "98.9", "time": buy_ms},
+        ]
+        viz._write_debug_csv(trades, dfs)
+
+        debug_file = self.data_root / "visualize" / "debug.csv"
+        self.assertTrue(debug_file.exists())
+        df = pd.read_csv(debug_file)
+
+        # Last BNB value must match portfolio.json (0.309)
+        self.assertAlmostEqual(df["BNB"].iloc[-1], current_bnb, places=6,
+                               msg="Last BNB value must equal portfolio.json balance")
+
+        # Candles before the buy (index 0 and 1) must show the pre-buy balance (0.150)
+        pre_buy_balance = current_bnb - 0.159
+        self.assertAlmostEqual(df["BNB"].iloc[0], pre_buy_balance, places=6,
+                               msg="First candle must reflect pre-buy balance")
+        self.assertAlmostEqual(df["BNB"].iloc[1], pre_buy_balance, places=6,
+                               msg="Candle before the buy must reflect pre-buy balance")
+
+        # The buy candle (index 2) and all later candles must show the post-buy balance
+        for row_idx in range(2, len(df)):
+            self.assertAlmostEqual(df["BNB"].iloc[row_idx], current_bnb, places=6,
+                                   msg=f"Row {row_idx} must reflect post-buy balance")
+
+
 
 
 if __name__ == "__main__":
