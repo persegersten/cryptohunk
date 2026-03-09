@@ -75,6 +75,15 @@ def _create_trades_json(trades_dir: Path, trades: list) -> None:
         json.dump(trades, f)
 
 
+def _create_portfolio_json(data_root: Path, balances: dict) -> None:
+    """Create a minimal portfolio.json anchoring backward-reconstruction tests."""
+    portfolio_dir = data_root / "portfolio"
+    portfolio_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"balances": {k: {"total": str(v)} for k, v in balances.items()}}
+    with open(portfolio_dir / "portfolio.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
 class TestVisualizeHistory(unittest.TestCase):
 
     def setUp(self):
@@ -259,6 +268,8 @@ class TestVisualizeHistory(unittest.TestCase):
         expected_qty = 0.01
         expected_first_price = 40000  # _create_history_csv: prices[0] = 40000 + 0*10
         _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to the current BTC balance from portfolio.json
+        _create_portfolio_json(self.data_root, {"BTC": expected_qty})
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
@@ -281,9 +292,13 @@ class TestVisualizeHistory(unittest.TestCase):
     def test_build_portfolio_performance_sell_reduces_holdings(self):
         """After buying and then selling all, portfolio value should drop to 0."""
         hist_dir = self.data_root / "history" / "BTC"
-        base_ms = 1_700_000_000_000
+        # Use an hour-aligned base so that floor('h') maps trades to exactly the
+        # expected candle index (Binance klines are always on UTC-hour boundaries).
+        base_ms = 1_699_999_200_000  # 2023-11-14 22:00:00 UTC
         interval_ms = 3_600_000
-        _create_history_csv(hist_dir, "BTC", n=50)
+        _create_history_csv(hist_dir, "BTC", n=50, base_ms=base_ms)
+        # After buying and then selling the full qty, the current balance is 0
+        _create_portfolio_json(self.data_root, {"BTC": 0.0})
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
@@ -313,6 +328,8 @@ class TestVisualizeHistory(unittest.TestCase):
         for currency in ["BTC", "ETH"]:
             hist_dir = self.data_root / "history" / currency
             _create_history_csv(hist_dir, currency, n=10)
+        # Anchor backward reconstruction to current balances from portfolio.json
+        _create_portfolio_json(self.data_root, {"BTC": btc_qty, "ETH": eth_qty})
         viz = VisualizeHistory(self.cfg)
         dfs = {
             "BTC": viz._read_history("BTC"),
@@ -345,6 +362,8 @@ class TestVisualizeHistory(unittest.TestCase):
         hist_dir = self.data_root / "history" / "BTC"
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to current balance
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
@@ -360,6 +379,8 @@ class TestVisualizeHistory(unittest.TestCase):
         hist_dir = self.data_root / "history" / "BTC"
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
+        # Anchor backward reconstruction to current balance
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
@@ -385,6 +406,8 @@ class TestVisualizeHistory(unittest.TestCase):
              "price": "40000", "time": base_ms},
         ]
         _create_trades_json(self.data_root / "trades", trades)
+        # Anchor backward reconstruction so the portfolio chart is non-empty
+        _create_portfolio_json(self.data_root, {"BTC": 0.01})
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
         self.assertTrue(success)

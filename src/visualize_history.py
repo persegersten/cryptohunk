@@ -317,10 +317,12 @@ class VisualizeHistory:
         """
         Beräkna portföljvärde över tid baserat på faktiska innehav.
 
-        Vid varje tidpunkt summeras innehav × aktuellt pris för alla valutor.
-        Värdet returneras i USDC (ej normaliserat).
+        Använder samma bakåtrekonstruktionsalgoritm som _write_debug_csv:
+        startar från aktuellt saldo i portfolio.json och ångrar varje affärs
+        nettoflöde för att ge historiska saldon.
 
-        Formel: portfolio_value = Σ position[valuta] × close_price[valuta]
+        Vid varje tidpunkt summeras innehav × aktuellt pris för alla valutor
+        plus det rekonstruerade USDC-saldot. Värdet returneras i USDC.
 
         Args:
             trades: Lista med alla trades (isBuyer, qty, symbol, time)
@@ -341,19 +343,39 @@ class VisualizeHistory:
             return pd.DataFrame(columns=["datetime", "portfolio_value"])
         idx = idx.sort_values()
 
+        # Läs portföljsaldo – används för att förankra varje valuta (samma som _write_debug_csv)
+        _portfolio_balances: Dict[str, float] = {}
+        portfolio_file = self.data_root / "portfolio" / "portfolio.json"
+        if portfolio_file.exists():
+            try:
+                with open(portfolio_file, "r", encoding="utf-8") as _pf:
+                    _portfolio_data = json.load(_pf)
+                for _asset, _info in _portfolio_data.get("balances", {}).items():
+                    try:
+                        _portfolio_balances[_asset.upper()] = float(_info.get("total", 0))
+                    except (ValueError, TypeError):
+                        log.warning(
+                            "Ogiltigt saldo för %s i portfolio.json: %s",
+                            _asset, _info.get("total"),
+                        )
+                log.info(
+                    "Portföljsaldon lästa för performance-diagram: %s",
+                    list(_portfolio_balances.keys()),
+                )
+            except Exception as e:
+                log.warning("Kunde inte läsa portföljsaldon från portfolio.json: %s", e)
+
         portfolio_value = pd.Series(0.0, index=idx)
 
         for currency, df in dfs.items():
-            # Samla trades för denna valuta
             currency_upper = currency.upper()
             currency_trades = [
                 t for t in trades
                 if str(t.get("symbol", "")).upper().startswith(currency_upper)
             ]
-            if not currency_trades:
-                continue
 
-            # Bygg delta-serie: positiv vid köp, negativ vid sälj
+            current_balance = _portfolio_balances.get(currency_upper, 0.0)
+
             trade_events: List[tuple] = []
             for t in currency_trades:
                 t_ms = t.get("time")
@@ -366,36 +388,16 @@ class VisualizeHistory:
                 if qty <= 0:
                     continue
                 delta = qty if t.get("isBuyer", False) else -qty
-                dt = pd.Timestamp(t_ms, unit="ms", tz="UTC")
-                trade_events.append((dt, delta))
+                trade_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
 
-            if not trade_events:
-                continue
-
-            trade_events.sort(key=lambda x: x[0])
-            trade_index = pd.DatetimeIndex([e[0] for e in trade_events])
-            delta_series = pd.Series(
-                [e[1] for e in trade_events], index=trade_index, dtype=float
-            )
-            # Summera eventuella dubbla tidsstämplar
-            delta_series = delta_series.groupby(level=0).sum()
-
-            # Beräkna kumulativ position för varje tidpunkt i idx
-            combined_idx = idx.union(delta_series.index).sort_values()
-            delta_on_combined = delta_series.reindex(combined_idx, fill_value=0.0)
-            position_on_combined = delta_on_combined.cumsum()
-            pos_series = (
-                position_on_combined.reindex(idx, method="ffill").fillna(0.0)
-            )
-            # Positions should never go negative; warn if they do (e.g. data inconsistency)
-            neg_mask = pos_series < 0
-            if neg_mask.any():
-                log.warning(
-                    "Negativ position för %s vid %d tidpunkter – klipps till 0",
-                    currency,
-                    int(neg_mask.sum()),
+            if trade_events:
+                # Bin varje affär till sin timkandle via floor('h') och gå bakåt
+                # från current_balance för att rekonstruera historiska saldon.
+                pos_series = self._reconstruct_balance_history(
+                    current_balance, trade_events, idx
                 )
-            pos_series = pos_series.clip(lower=0.0)
+            else:
+                pos_series = pd.Series(current_balance, index=idx)
 
             # Prisserie för denna valuta, forward-filld till gemensamt index
             price_series = (
@@ -405,6 +407,35 @@ class VisualizeHistory:
             )
 
             portfolio_value = portfolio_value + pos_series * price_series
+
+        # Lägg till USDC-saldo (samma bakåtrekonstruktion som _write_debug_csv)
+        current_usdc_balance = _portfolio_balances.get("USDC", 0.0)
+        usdc_events: List[tuple] = []
+        for t in trades:
+            symbol = str(t.get("symbol", "")).upper()
+            if not symbol.endswith("USDC"):
+                continue
+            t_ms = t.get("time")
+            if not t_ms:
+                continue
+            try:
+                quote_qty = float(t.get("quoteQty", 0))
+            except (ValueError, TypeError):
+                continue
+            if quote_qty <= 0:
+                continue
+            # Köp krypto → USDC minskar; sälj krypto → USDC ökar
+            delta = quote_qty if not t.get("isBuyer", False) else -quote_qty
+            usdc_events.append((pd.Timestamp(t_ms, unit="ms", tz="UTC"), delta))
+
+        if usdc_events:
+            usdc_pos: pd.Series = self._reconstruct_balance_history(
+                current_usdc_balance, usdc_events, idx
+            )
+        else:
+            usdc_pos = pd.Series(current_usdc_balance, index=idx)
+
+        portfolio_value = portfolio_value + usdc_pos
 
         # Filtrera bort tidpunkter utan innehav
         result = pd.DataFrame(
