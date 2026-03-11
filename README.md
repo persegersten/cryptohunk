@@ -25,7 +25,7 @@ export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 export DATA_AREA_ROOT_DIR="/path/to/data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="300"
-# export TRADE_THRESHOLD="100.0"  # optional, default: 10.0
+# export TRADE_THRESHOLD="10.0"   # optional, default: 10.0
 export DRY_RUN="true"
 
 # Run complete workflow (TA strategy)

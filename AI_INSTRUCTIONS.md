@@ -174,7 +174,7 @@ CURRENCY_HISTORY_NOF_ELEMENTS="300"   # Number of historical candles
 
 ### Optional Environment Variables
 ```bash
-TRADE_THRESHOLD="100.0"               # Minimum trade value in USDC (default: 10.0)
+TRADE_THRESHOLD="10.0"                # Minimum trade value in USDC (default: 10.0)
 TAKE_PROFIT_PERCENTAGE="10.0"         # Default: 10%
 STOP_LOSS_PERCENTAGE="6.0"            # Default: 6%
 QUOTE_ASSETS="USDT,USDC"              # Default: "USDT,USDC"
