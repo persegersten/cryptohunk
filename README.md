@@ -25,7 +25,7 @@ export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 export DATA_AREA_ROOT_DIR="/path/to/data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="300"
-export TRADE_THRESHOLD="100.0"
+# export TRADE_THRESHOLD="100.0"  # optional, default: 10.0
 export DRY_RUN="true"
 
 # Run complete workflow (TA strategy)
@@ -49,9 +49,9 @@ python3 -m src.main --run-ta2 --rebalance-portfolio
 - `DATA_AREA_ROOT_DIR` - Data storage path
 - `CURRENCY_HISTORY_PERIOD` - History period (e.g., "1h")
 - `CURRENCY_HISTORY_NOF_ELEMENTS` - Number of historical data points
-- `TRADE_THRESHOLD` - Minimum trade value in USDC
 
 ### Optional Variables (with defaults)
+- `TRADE_THRESHOLD` - Minimum trade value in USDC (default: 10.0)
 - `TAKE_PROFIT_PERCENTAGE` - Profit target (default: 10.0%)
 - `STOP_LOSS_PERCENTAGE` - Loss limit (default: 6.0%)
 - `QUOTE_ASSETS` - Quote currencies (default: "USDT,USDC")

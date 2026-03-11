@@ -170,11 +170,11 @@ BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 DATA_AREA_ROOT_DIR="/path/to/data"   # Local storage for CSV files
 CURRENCY_HISTORY_PERIOD="1h"          # Kline interval (1m, 5m, 1h, 1d, etc.)
 CURRENCY_HISTORY_NOF_ELEMENTS="300"   # Number of historical candles
-TRADE_THRESHOLD="100.0"               # Minimum trade value in USDC
 ```
 
 ### Optional Environment Variables
 ```bash
+TRADE_THRESHOLD="100.0"               # Minimum trade value in USDC (default: 10.0)
 TAKE_PROFIT_PERCENTAGE="10.0"         # Default: 10%
 STOP_LOSS_PERCENTAGE="6.0"            # Default: 6%
 QUOTE_ASSETS="USDT,USDC"              # Default: "USDT,USDC"
