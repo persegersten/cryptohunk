@@ -709,6 +709,8 @@ class VisualizeHistory:
 
     def _build_combined_html(self, charts: Dict[str, str]) -> str:
         """Bygg kombinerat HTML-dokument med flikar för valutaval."""
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
         # Separera valutaflikar från portföljfliken
         currency_keys = [c for c in charts if c != "Performance"]
         has_portfolio = "Performance" in charts
@@ -810,11 +812,13 @@ class VisualizeHistory:
             ".vh-tab-portfolio{color:#a6e3a1;border-color:#a6e3a1}\n"
             ".vh-tab-portfolio.vh-tab-active{color:#a6e3a1}\n"
             ".vh-tab-sep{width:1px;background:#45475a;margin:6px 4px;align-self:stretch}\n"
+            ".vh-created-at{margin-left:auto;color:#4a5a80;font-size:11px;padding-bottom:10px;align-self:flex-end;white-space:nowrap}\n"
             "</style>\n"
             "</head>\n"
             "<body>\n"
             '<div class="vh-tabs">\n'
             f"{tabs_html}\n"
+            f'<span class="vh-created-at">{created_at}</span>\n'
             "</div>\n"
             f"{chart_sections}\n"
             f"{info_box_html}\n"
