@@ -500,12 +500,17 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("trade-info", content)
 
     def test_run_html_contains_created_at_timestamp(self):
-        """HTML output should contain a creation timestamp in the tab bar."""
-        import re
+        """HTML output should contain a creation timestamp in Europe/Stockholm timezone."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz_sthlm = ZoneInfo("Europe/Stockholm")
         hist_dir = self.data_root / "history" / "BTC"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
+        before = datetime.now(tz=tz_sthlm).replace(second=0, microsecond=0)
         success = viz.run()
+        after = datetime.now(tz=tz_sthlm).replace(second=0, microsecond=0)
         self.assertTrue(success)
         content = (self.data_root / "visualize" / "history_chart.html").read_text(
             encoding="utf-8"
@@ -513,6 +518,11 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("vh-created-at", content)
         # Verify the timestamp follows the expected yyyy-MM-dd HH:mm format
         self.assertRegex(content, r'vh-created-at">\d{4}-\d{2}-\d{2} \d{2}:\d{2}<')
+        # Parse the embedded timestamp and verify it falls within the Europe/Stockholm window
+        raw = content.split('vh-created-at">')[1].split("<")[0]
+        embedded = datetime.strptime(raw, "%Y-%m-%d %H:%M").replace(tzinfo=tz_sthlm)
+        self.assertGreaterEqual(embedded, before)
+        self.assertLessEqual(embedded, after)
 
     def test_run_returns_false_when_no_history(self):
         viz = VisualizeHistory(self.cfg)

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -709,7 +710,7 @@ class VisualizeHistory:
 
     def _build_combined_html(self, charts: Dict[str, str]) -> str:
         """Bygg kombinerat HTML-dokument med flikar för valutaval."""
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+        created_at = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M")
 
         # Separera valutaflikar från portföljfliken
         currency_keys = [c for c in charts if c != "Performance"]
