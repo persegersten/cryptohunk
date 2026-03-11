@@ -87,7 +87,9 @@ class VisualizeHistory:
             if str(t.get("symbol", "")).upper().startswith(currency_upper)
         ]
 
-    def _format_trade_label(self, trade: Dict[str, Any]) -> str:
+    def _format_trade_label(
+        self, trade: Dict[str, Any], buy_price: Optional[float] = None
+    ) -> str:
         """Skapa en detaljerad textetikett för ett trade."""
         is_buyer = trade.get("isBuyer", False)
         action = "KÖP" if is_buyer else "SÄLJ"
@@ -104,7 +106,7 @@ class VisualizeHistory:
         else:
             time_str = "?"
 
-        return (
+        label = (
             f"<b>{action}</b><br>"
             f"Symbol: {symbol}<br>"
             f"Pris: {price}<br>"
@@ -113,6 +115,17 @@ class VisualizeHistory:
             f"Avgift: {commission} {commission_asset}<br>"
             f"Tid: {time_str}"
         )
+
+        if not is_buyer and buy_price is not None and buy_price > 0:
+            try:
+                sell_price = float(price)
+                pct_change = (sell_price - buy_price) / buy_price * 100
+                sign = "+" if pct_change >= 0 else ""
+                label += f"<br>Förändring vs. köp: {sign}{pct_change:.2f}%"
+            except (ValueError, TypeError):
+                pass
+
+        return label
 
     @staticmethod
     def _reconstruct_balance_history(
@@ -586,7 +599,11 @@ class VisualizeHistory:
             buy_times, buy_prices, buy_labels = [], [], []
             sell_times, sell_prices, sell_labels = [], [], []
 
-            for trade in currency_trades:
+            last_buy_price: Optional[float] = None
+            sorted_trades = sorted(
+                currency_trades, key=lambda t: t.get("time") or 0
+            )
+            for trade in sorted_trades:
                 trade_time_ms = trade.get("time")
                 if not trade_time_ms:
                     continue
@@ -602,13 +619,15 @@ class VisualizeHistory:
                 except (ValueError, TypeError):
                     continue
 
-                label = self._format_trade_label(trade)
                 is_buyer = trade.get("isBuyer", False)
                 if is_buyer:
+                    last_buy_price = price
+                    label = self._format_trade_label(trade)
                     buy_times.append(trade_dt)
                     buy_prices.append(price)
                     buy_labels.append(label)
                 else:
+                    label = self._format_trade_label(trade, buy_price=last_buy_price)
                     sell_times.append(trade_dt)
                     sell_prices.append(price)
                     sell_labels.append(label)

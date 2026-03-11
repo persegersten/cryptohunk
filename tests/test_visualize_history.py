@@ -181,6 +181,34 @@ class TestVisualizeHistory(unittest.TestCase):
         # Trade-ID and Order-ID should NOT appear in the popup
         self.assertNotIn("Trade-ID", label)
         self.assertNotIn("Order-ID", label)
+        # Without buy_price, no percentage change should appear
+        self.assertNotIn("Förändring", label)
+
+    def test_format_trade_label_sell_with_buy_price_profit(self):
+        trade = {
+            "id": 43, "orderId": 100, "symbol": "BTCUSDT", "isBuyer": False,
+            "price": "42000.00", "qty": "0.001", "quoteQty": "42.00",
+            "commission": "0.042", "commissionAsset": "USDT",
+            "time": 1_700_007_200_000,
+        }
+        viz = VisualizeHistory(self.cfg)
+        label = viz._format_trade_label(trade, buy_price=40000.0)
+        self.assertIn("SÄLJ", label)
+        self.assertIn("Förändring vs. köp", label)
+        self.assertIn("+5.00%", label)
+
+    def test_format_trade_label_sell_with_buy_price_loss(self):
+        trade = {
+            "id": 43, "orderId": 100, "symbol": "BTCUSDT", "isBuyer": False,
+            "price": "38000.00", "qty": "0.001", "quoteQty": "38.00",
+            "commission": "0.038", "commissionAsset": "USDT",
+            "time": 1_700_007_200_000,
+        }
+        viz = VisualizeHistory(self.cfg)
+        label = viz._format_trade_label(trade, buy_price=40000.0)
+        self.assertIn("SÄLJ", label)
+        self.assertIn("Förändring vs. köp", label)
+        self.assertIn("-5.00%", label)
 
     # ------------------------------------------------------------------
     # generate_chart
@@ -214,6 +242,34 @@ class TestVisualizeHistory(unittest.TestCase):
         # Check that both buy and sell trace names are present (unicode-escaped)
         self.assertIn('"name":"K\\u00f6p"', html_content)
         self.assertIn('"name":"S\\u00e4lj"', html_content)
+
+    def test_generate_chart_sell_label_includes_pct_change_vs_buy(self):
+        """Sell marker label must include percentage change vs. the preceding buy."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+
+        # Buy at 40000, sell at 42000 → +5.00 %
+        trades = [
+            {
+                "id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True,
+                "price": "40000.00", "qty": "0.001", "quoteQty": "40.00",
+                "commission": "0.000001", "commissionAsset": "BTC",
+                "time": 1_700_003_600_000,
+            },
+            {
+                "id": 2, "orderId": 11, "symbol": "BTCUSDT", "isBuyer": False,
+                "price": "42000.00", "qty": "0.001", "quoteQty": "42.00",
+                "commission": "0.042", "commissionAsset": "USDT",
+                "time": 1_700_010_800_000,
+            },
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", trades)
+        self.assertIsNotNone(html_content)
+        # Plotly unicode-escapes non-ASCII, so check for the escaped form
+        # "F\u00f6r\u00e4ndring vs. k\u00f6p" = "Förändring vs. köp"
+        self.assertIn("F\\u00f6r\\u00e4ndring vs. k\\u00f6p", html_content)
+        self.assertIn("+5.00%", html_content)
 
     def test_generate_chart_without_trades(self):
         hist_dir = self.data_root / "history" / "BTC"
