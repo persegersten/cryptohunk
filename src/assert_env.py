@@ -14,7 +14,7 @@ Miljövariabler som hanteras:
 - DATA_AREA_ROOT_DIR (måste sättas)
 - CURRENCY_HISTORY_PERIOD (måste sättas)
 - CURRENCY_HISTORY_NOF_ELEMENTS (måste sättas, int)
-- TRADE_THRESHOLD (måste sättas, float)
+- TRADE_THRESHOLD (valfritt, float, default: 10.0)
 - TAKE_PROFIT_PERCENTAGE (valfritt, float, default: 10.0)
 - STOP_LOSS_PERCENTAGE (valfritt, float, default: 6.0)
 - QUOTE_ASSETS (valfritt, ex "USDT,USDC" — vilka quote-valutor vi vill hämta trades för)
@@ -63,7 +63,6 @@ def load_config_from_env() -> Config:
         "DATA_AREA_ROOT_DIR",
         "CURRENCY_HISTORY_PERIOD",
         "CURRENCY_HISTORY_NOF_ELEMENTS",
-        "TRADE_THRESHOLD",
     ]
 
     for k in required_keys:
@@ -93,7 +92,7 @@ def load_config_from_env() -> Config:
         raise EnvironmentError("CURRENCY_HISTORY_NOF_ELEMENTS måste vara ett heltal.")
 
     try:
-        trade_threshold = float(env.get("TRADE_THRESHOLD", "0"))
+        trade_threshold = float(env.get("TRADE_THRESHOLD", "10.0"))
     except ValueError:
         raise EnvironmentError("TRADE_THRESHOLD måste vara ett tal (float).")
 
