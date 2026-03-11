@@ -7,10 +7,6 @@
 # export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 # export DATA_AREA_ROOT_DIR="/home/<ditthome>/tmp/cryptohunk_data"
 # export CURRENCY_HISTORY_NOF_ELEMENTS="1000"
-# export TRADE_THRESHOLD="10"
-# export DRY_RUN="false"
-# export TAKE_PROFIT_PERCENTAGE="10.0"
-# export STOP_LOSS_PERCENTAGE="6.0"
 
 # export FTP_HOST="din_ftp"
 # export FTP_DIR="din_target_folder"
