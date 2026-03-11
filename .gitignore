@@ -2,7 +2,7 @@
 *.swp
 *.json
 local_analyse.sh
-local.sh
+local_run.sh
 portfolio.json
 secrets.json
 history/
