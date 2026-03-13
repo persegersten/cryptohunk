@@ -529,6 +529,25 @@ class TestVisualizeHistory(unittest.TestCase):
         success = viz.run()
         self.assertFalse(success)
 
+    def test_combined_html_has_apply_last_month_js(self):
+        """Combined HTML must contain applyLastMonth JS called on load and on tab switch."""
+        hist_dir = self.data_root / "history" / "BTC"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        # Function must be defined
+        self.assertIn("function applyLastMonth", content)
+        # Active button index 1 = "Senaste månaden" must be set
+        self.assertIn("xaxis.rangeselector.active", content)
+        # Must be called when switching tabs (inside showChart)
+        self.assertIn("applyLastMonth('chart-' + c)", content)
+        # Must be called on initial page load for the first chart
+        self.assertIn("applyLastMonth('chart-' + _currencies[0])", content)
+
     # ------------------------------------------------------------------
     # _write_debug_csv
     # ------------------------------------------------------------------
