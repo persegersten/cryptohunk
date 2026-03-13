@@ -532,6 +532,11 @@ class VisualizeHistory:
             ),
         )
 
+        last_date = perf_df["datetime"].max()
+        if pd.notna(last_date):
+            one_month_ago = last_date - pd.DateOffset(months=1)
+            fig.update_xaxes(range=[one_month_ago, last_date])
+
         log.info("Portföljdiagram byggt")
         return fig.to_html(
             full_html=False,
@@ -701,6 +706,11 @@ class VisualizeHistory:
             row=1, col=1,
         )
 
+        last_date = df["datetime"].max()
+        if pd.notna(last_date):
+            one_month_ago = last_date - pd.DateOffset(months=1)
+            fig.update_xaxes(range=[one_month_ago, last_date], row=1, col=1)
+
         log.info("Diagram byggt för %s", currency)
         return fig.to_html(
             full_html=False,
@@ -766,6 +776,20 @@ class VisualizeHistory:
             "  if (active) cls += ' vh-tab-active';\n"
             "  return cls;\n"
             "}\n"
+            "function applyLastMonth(chartId) {\n"
+            "  var el = document.getElementById(chartId);\n"
+            "  if (!el || !el.data || !el.data[0]) return;\n"
+            "  var xs = el.data[0].x;\n"
+            "  if (!xs || !xs.length) return;\n"
+            "  var lastDate = new Date(xs[xs.length - 1]);\n"
+            "  var startDate = new Date(lastDate);\n"
+            "  startDate.setMonth(startDate.getMonth() - 1);\n"
+            "  Plotly.relayout(el, {\n"
+            "    'xaxis.range[0]': startDate.toISOString(),\n"
+            "    'xaxis.range[1]': lastDate.toISOString(),\n"
+            "    'xaxis.rangeselector.active': 1\n"
+            "  });\n"
+            "}\n"
             "function showChart(c) {\n"
             "  _currencies.forEach(function(x) {\n"
             "    var w = document.getElementById('wrapper-' + x);\n"
@@ -774,9 +798,13 @@ class VisualizeHistory:
             "    if (t) t.className = _tabClass(x, x === c);\n"
             "  });\n"
             "  var el = document.getElementById('chart-' + c);\n"
-            "  if (el) Plotly.Plots.resize(el);\n"
+            "  if (el) {\n"
+            "    Plotly.Plots.resize(el);\n"
+            "    applyLastMonth('chart-' + c);\n"
+            "  }\n"
             "}\n"
             "window.addEventListener('load', function() {\n"
+            "  if (_currencies.length > 0) applyLastMonth('chart-' + _currencies[0]);\n"
             "  _currencies.forEach(function(c) {\n"
             "    var el = document.getElementById('chart-' + c);\n"
             "    if (el) el.on('plotly_click', function(data) {\n"
@@ -804,10 +832,12 @@ class VisualizeHistory:
             "<style>\n"
             "body{background:#1a1a2e;color:#cdd6f4;font-family:sans-serif;margin:0;padding:0}\n"
             ".vh-tabs{padding:0 20px;background:#16213e;border-bottom:1px solid #45475a;"
-            "display:flex;align-items:flex-end;gap:4px}\n"
+            "display:flex;align-items:flex-end;gap:4px;overflow-x:auto;flex-wrap:nowrap;"
+            "-webkit-overflow-scrolling:touch}\n"
             ".vh-tab{background:#2a2a3e;color:#cdd6f4;border:1px solid #45475a;"
             "border-bottom:none;border-radius:6px 6px 0 0;padding:10px 20px;"
-            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s}\n"
+            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s;"
+            "flex-shrink:0}\n"
             ".vh-tab:hover{background:#3a3a5e}\n"
             ".vh-tab-active{background:#1a1a2e;color:#89dceb;border-bottom:1px solid #1a1a2e}\n"
             ".vh-tab-portfolio{color:#a6e3a1;border-color:#a6e3a1}\n"
