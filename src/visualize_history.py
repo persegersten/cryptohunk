@@ -532,6 +532,11 @@ class VisualizeHistory:
             ),
         )
 
+        last_date = perf_df["datetime"].max()
+        if pd.notna(last_date):
+            one_month_ago = last_date - pd.DateOffset(months=1)
+            fig.update_xaxes(range=[one_month_ago, last_date])
+
         log.info("Portföljdiagram byggt")
         return fig.to_html(
             full_html=False,
@@ -701,6 +706,11 @@ class VisualizeHistory:
             row=1, col=1,
         )
 
+        last_date = df["datetime"].max()
+        if pd.notna(last_date):
+            one_month_ago = last_date - pd.DateOffset(months=1)
+            fig.update_xaxes(range=[one_month_ago, last_date], row=1, col=1)
+
         log.info("Diagram byggt för %s", currency)
         return fig.to_html(
             full_html=False,
@@ -804,10 +814,12 @@ class VisualizeHistory:
             "<style>\n"
             "body{background:#1a1a2e;color:#cdd6f4;font-family:sans-serif;margin:0;padding:0}\n"
             ".vh-tabs{padding:0 20px;background:#16213e;border-bottom:1px solid #45475a;"
-            "display:flex;align-items:flex-end;gap:4px}\n"
+            "display:flex;align-items:flex-end;gap:4px;overflow-x:auto;flex-wrap:nowrap;"
+            "-webkit-overflow-scrolling:touch}\n"
             ".vh-tab{background:#2a2a3e;color:#cdd6f4;border:1px solid #45475a;"
             "border-bottom:none;border-radius:6px 6px 0 0;padding:10px 20px;"
-            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s}\n"
+            "font-size:15px;cursor:pointer;margin-bottom:-1px;transition:background 0.15s;"
+            "flex-shrink:0}\n"
             ".vh-tab:hover{background:#3a3a5e}\n"
             ".vh-tab-active{background:#1a1a2e;color:#89dceb;border-bottom:1px solid #1a1a2e}\n"
             ".vh-tab-portfolio{color:#a6e3a1;border-color:#a6e3a1}\n"
