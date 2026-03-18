@@ -15,21 +15,15 @@ DATA_AREA_ROOT_DIR/output/backtesting/<CURRENCY>_backtesting.csv.
 Varje rad i resultatet representerar ett ljus (candle) för en valuta och innehåller:
 - timestamp_ms: tidsstämpel (Close_Time_ms eller Open_Time_ms)
 - currency: valutasymbol
-- close: stängningspris vid detta ljus
 - ta_signal: rå TA2-signal (-1=SÄLJA, 0=HÅLLA, 1=KÖPA)
 - signal: rekommenderad åtgärd (BUY/SELL/HOLD)
-- trade_executed: simulerat utfört köp/sälj/håll
-- cash_usdc: tillgänglig kassa i USDC efter handel
-- holdings: antal enheter av valutan i portföljen
-- holdings_value_usdc: värde av innehav i USDC vid aktuellt pris
-- total_value_usdc: totalt portföljvärde (kassa + innehav)
 """
 from __future__ import annotations
 
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pandas as pd
 
@@ -46,10 +40,7 @@ MIN_CANDLES_FOR_TA = 200
 
 
 class Backtest:
-    """Historisk simulering av TA2 och rebalansering kombinerat."""
-
-    # Starttkapital i USDC per valuta för simuleringen
-    INITIAL_USDC_PER_CURRENCY = 1000.0
+    """Historisk simulering av TA2-strategin."""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -118,19 +109,13 @@ class Backtest:
 
         För varje ljus (candle) från MIN_CANDLES_FOR_TA:
         1. Beräkna TA2-signal med data upp till och inklusive detta ljus.
-        2. Simulera handel direkt baserat på råa TA2-signalen (BUY/SELL/HOLD).
+        2. Mappa råa TA2-signalen direkt (BUY/SELL/HOLD).
            TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) tillämpas
            INTE vid backtesting, för att ge en rättvisande bild av TA2-strategin.
-        3. Registrera portföljstatus.
 
         Returnerar lista med poster, en per ljus.
         """
         records: List[Dict] = []
-
-        # Portföljstatus för denna valuta
-        cash_usdc = self.INITIAL_USDC_PER_CURRENCY
-        holdings = 0.0
-        entry_price: Optional[float] = None
 
         start_idx = max(MIN_CANDLES_FOR_TA, 9)  # EMA_200-stabilitet och TA2-LOOKBACK
 
@@ -148,14 +133,6 @@ class Backtest:
             window = ta_df.iloc[: t + 1]
             last = window.iloc[-1]
 
-            current_close = last.get("Close")
-            if current_close is None or pd.isna(current_close) or float(current_close) <= 0:
-                continue
-            current_close = float(current_close)
-
-            # Portföljstatus
-            holdings_value = holdings * current_close
-
             # Beräkna TA2-signal
             ta_signal = self._rebalancer._calculate_ta2_signal(window)
 
@@ -166,25 +143,6 @@ class Backtest:
                 signal = "SELL"
             else:
                 signal = "HOLD"
-
-            # Simulera handel
-            trade_executed = "HOLD"
-            if signal == "BUY" and holdings == 0 and cash_usdc > 0:
-                holdings = cash_usdc / current_close
-                entry_price = current_close
-                cash_usdc = 0.0
-                trade_executed = "BUY"
-                log.debug(
-                    "%s BUY vid %.8f (innehav=%.8f enheter)", currency, current_close, holdings
-                )
-            elif signal == "SELL" and holdings > 0:
-                cash_usdc = holdings * current_close
-                holdings = 0.0
-                entry_price = None
-                trade_executed = "SELL"
-                log.debug("%s SELL vid %.8f (kassa=%.4f USDC)", currency, current_close, cash_usdc)
-
-            total_value = cash_usdc + holdings * current_close
 
             # Tidsstämpel
             timestamp_ms: object = ""
@@ -201,14 +159,8 @@ class Backtest:
                 {
                     "timestamp_ms": timestamp_ms,
                     "currency": currency,
-                    "close": round(current_close, 8),
                     "ta_signal": ta_signal,
                     "signal": signal,
-                    "trade_executed": trade_executed,
-                    "cash_usdc": round(cash_usdc, 4),
-                    "holdings": round(holdings, 8),
-                    "holdings_value_usdc": round(holdings * current_close, 4),
-                    "total_value_usdc": round(total_value, 4),
                 }
             )
 
@@ -225,14 +177,8 @@ class Backtest:
         fieldnames = [
             "timestamp_ms",
             "currency",
-            "close",
             "ta_signal",
             "signal",
-            "trade_executed",
-            "cash_usdc",
-            "holdings",
-            "holdings_value_usdc",
-            "total_value_usdc",
         ]
 
         try:
@@ -254,11 +200,7 @@ class Backtest:
         Returnerar True vid framgång, False vid fel.
         """
         log.info("=== Startar Backtest (TA2) ===")
-        log.info(
-            "Startkapital: %.2f USDC per valuta, valutor: %s",
-            self.INITIAL_USDC_PER_CURRENCY,
-            self.cfg.currencies,
-        )
+        log.info("Valutor: %s", self.cfg.currencies)
 
         # Säkerställ att utdatakatalogen finns innan vi börjar
         self.output_root.mkdir(parents=True, exist_ok=True)

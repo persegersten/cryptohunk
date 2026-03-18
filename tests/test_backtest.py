@@ -165,20 +165,20 @@ class TestBacktestSimulateCurrency(unittest.TestCase):
         self.assertEqual(len(records), 10)
 
     def test_record_has_required_fields(self):
-        """Each record should have all expected columns."""
+        """Each record should have exactly the four expected columns."""
         n = MIN_CANDLES_FOR_TA + 5
         _write_history_csv(self.tmp, "BTC", n_rows=n)
         history_df = self.bt._load_history("BTC")
         ta_df = self.bt._compute_full_ta(history_df, "BTC")
         records = self.bt._simulate_currency("BTC", ta_df)
         self.assertTrue(len(records) > 0)
-        required = {
-            "timestamp_ms", "currency", "close", "ta_signal", "signal",
-            "trade_executed", "cash_usdc", "holdings", "holdings_value_usdc",
-            "total_value_usdc",
-        }
+        required = {"timestamp_ms", "currency", "ta_signal", "signal"}
         for field in required:
             self.assertIn(field, records[0], f"Field {field} missing from record")
+        # Removed columns must not be present
+        for removed in ("close", "trade_executed", "cash_usdc", "holdings",
+                         "holdings_value_usdc", "total_value_usdc"):
+            self.assertNotIn(removed, records[0], f"Field {removed} should not be in record")
 
     def test_currency_field_is_uppercase(self):
         n = MIN_CANDLES_FOR_TA + 5
@@ -189,29 +189,16 @@ class TestBacktestSimulateCurrency(unittest.TestCase):
         for rec in records:
             self.assertEqual(rec["currency"], "BTC")
 
-    def test_total_value_equals_cash_plus_holdings(self):
-        """total_value_usdc should equal cash_usdc + holdings_value_usdc."""
-        n = MIN_CANDLES_FOR_TA + 50
-        _write_history_csv(self.tmp, "BTC", n_rows=n)
-        history_df = self.bt._load_history("BTC")
-        ta_df = self.bt._compute_full_ta(history_df, "BTC")
-        records = self.bt._simulate_currency("BTC", ta_df)
-        for rec in records:
-            expected = round(rec["cash_usdc"] + rec["holdings_value_usdc"], 4)
-            self.assertAlmostEqual(rec["total_value_usdc"], expected, places=2)
-
     def test_no_holdings_when_no_buy_signal(self):
-        """With monotonically rising prices, MACD will be positive (possible BUY).
-        At minimum we verify holdings and cash are non-negative at all times."""
+        """With monotonically rising prices, verify ta_signal and signal are set."""
         n = MIN_CANDLES_FOR_TA + 20
         _write_history_csv(self.tmp, "BTC", n_rows=n)
         history_df = self.bt._load_history("BTC")
         ta_df = self.bt._compute_full_ta(history_df, "BTC")
         records = self.bt._simulate_currency("BTC", ta_df)
         for rec in records:
-            self.assertGreaterEqual(rec["cash_usdc"], 0.0)
-            self.assertGreaterEqual(rec["holdings"], 0.0)
-            self.assertGreaterEqual(rec["total_value_usdc"], 0.0)
+            self.assertIn(rec["signal"], ("BUY", "SELL", "HOLD"))
+            self.assertIn(rec["ta_signal"], (-1, 0, 1))
 
     def test_trade_threshold_rules_skipped_sell_executed_on_small_holdings(self):
         """Backtest should execute SELL from raw TA2 signal regardless of holdings size.
@@ -262,14 +249,8 @@ class TestBacktestSaveResults(unittest.TestCase):
             {
                 "timestamp_ms": 1000000,
                 "currency": "BTC",
-                "close": 50000.0,
                 "ta_signal": 0,
                 "signal": "HOLD",
-                "trade_executed": "HOLD",
-                "cash_usdc": 1000.0,
-                "holdings": 0.0,
-                "holdings_value_usdc": 0.0,
-                "total_value_usdc": 1000.0,
             }
         ]
         result = self.bt._save_results("BTC", records)
@@ -285,24 +266,15 @@ class TestBacktestSaveResults(unittest.TestCase):
         with open(output_file, encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
-        self.assertIn("timestamp_ms", header)
-        self.assertIn("currency", header)
-        self.assertIn("signal", header)
-        self.assertIn("total_value_usdc", header)
+        self.assertEqual(header, ["timestamp_ms", "currency", "ta_signal", "signal"])
 
     def test_save_records_readable_by_pandas(self):
         records = [
             {
                 "timestamp_ms": 1000000 + i,
                 "currency": "BTC",
-                "close": 50000.0 + i,
                 "ta_signal": 0,
                 "signal": "HOLD",
-                "trade_executed": "HOLD",
-                "cash_usdc": 1000.0,
-                "holdings": 0.0,
-                "holdings_value_usdc": 0.0,
-                "total_value_usdc": 1000.0,
             }
             for i in range(5)
         ]
@@ -363,16 +335,19 @@ class TestBacktestRun(unittest.TestCase):
         self.assertTrue(all(btc_df["currency"] == "BTC"))
         self.assertTrue(all(eth_df["currency"] == "ETH"))
 
-    def test_output_csv_contains_signal_column(self):
-        """Output CSV must include the 'signal' column."""
+    def test_output_csv_contains_exactly_four_columns(self):
+        """Output CSV must have exactly timestamp_ms, currency, ta_signal, signal."""
         cfg = _make_cfg(self.tmp, currencies=["BTC"])
         _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 5)
         bt = Backtest(cfg)
         bt.run()
         output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         df = pd.read_csv(output_file)
-        self.assertIn("signal", df.columns)
-        self.assertIn("ta_signal", df.columns)
+        self.assertEqual(list(df.columns), ["timestamp_ms", "currency", "ta_signal", "signal"])
+        # Removed columns must not appear
+        for removed in ("close", "trade_executed", "cash_usdc", "holdings",
+                         "holdings_value_usdc", "total_value_usdc"):
+            self.assertNotIn(removed, df.columns)
 
 
 class TestBacktestCLIArgument(unittest.TestCase):
