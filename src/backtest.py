@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Backtest - Historisk simulering av TA2 och rebalansering kombinerat.
+Backtest - Historisk simulering av TA2-strategin på nedladdad historikdata.
 
 Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv,
-beräknar tekniska indikatorer och simulerar TA2-signaler kombinerat med
-rebalanseringsregler (take-profit, stop-loss) över hela den tillgängliga historiken.
+beräknar tekniska indikatorer och simulerar TA2-signaler över hela den tillgängliga
+historiken.
+
+TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) som används i live-
+rebalansering tillämpas INTE, för att ge en rättvisande bild av TA2-strategin i sig.
 
 Resultatet sparas i DATA_AREA_ROOT_DIR/output/backtesting.csv.
 
@@ -55,7 +58,7 @@ class Backtest:
 
         # Återanvänd TechnicalAnalysis för indikatorberäkningar
         self._ta = TechnicalAnalysis(cfg)
-        # Återanvänd RebalancePortfolio för TA2-signal och åsidosättningsregler
+        # Återanvänd RebalancePortfolio för TA2-signalberäkning
         self._rebalancer = RebalancePortfolio(cfg)
 
     def _load_history(self, currency: str) -> Optional[pd.DataFrame]:
@@ -114,9 +117,10 @@ class Backtest:
 
         För varje ljus (candle) från MIN_CANDLES_FOR_TA:
         1. Beräkna TA2-signal med data upp till och inklusive detta ljus.
-        2. Applicera åsidosättningsregler (take-profit, stop-loss).
-        3. Simulera handel baserat på rekommendationen.
-        4. Registrera portföljstatus.
+        2. Simulera handel direkt baserat på råa TA2-signalen (BUY/SELL/HOLD).
+           TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) tillämpas
+           INTE vid backtesting, för att ge en rättvisande bild av TA2-strategin.
+        3. Registrera portföljstatus.
 
         Returnerar lista med poster, en per ljus.
         """
@@ -150,23 +154,17 @@ class Backtest:
 
             # Portföljstatus
             holdings_value = holdings * current_close
-            current_value_usdc = holdings_value
-
-            if holdings > 0 and entry_price and entry_price > 0:
-                percentage_change = (current_close - entry_price) / entry_price * 100.0
-            else:
-                percentage_change = 0.0
 
             # Beräkna TA2-signal
             ta_signal = self._rebalancer._calculate_ta2_signal(window)
 
-            # Applicera åsidosättningsregler
-            signal, _priority = self._rebalancer._generate_signal(
-                currency=currency,
-                ta_score=ta_signal,
-                current_value_usdc=current_value_usdc,
-                percentage_change=percentage_change,
-            )
+            # Mappa råa TA2-signalen direkt – TRADE_THRESHOLD-regler hoppas över
+            if ta_signal == 1:
+                signal = "BUY"
+            elif ta_signal == -1:
+                signal = "SELL"
+            else:
+                signal = "HOLD"
 
             # Simulera handel
             trade_executed = "HOLD"
@@ -250,7 +248,7 @@ class Backtest:
 
         Returnerar True vid framgång, False vid fel.
         """
-        log.info("=== Startar Backtest (TA2 + rebalansering) ===")
+        log.info("=== Startar Backtest (TA2) ===")
         log.info(
             "Startkapital: %.2f USDC per valuta, valutor: %s",
             self.INITIAL_USDC_PER_CURRENCY,

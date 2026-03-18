@@ -213,6 +213,40 @@ class TestBacktestSimulateCurrency(unittest.TestCase):
             self.assertGreaterEqual(rec["holdings"], 0.0)
             self.assertGreaterEqual(rec["total_value_usdc"], 0.0)
 
+    def test_trade_threshold_rules_skipped_sell_executed_on_small_holdings(self):
+        """Backtest should execute SELL from raw TA2 signal regardless of holdings size.
+
+        In live trading, Rule 3 prevents SELL when holdings < TRADE_THRESHOLD (unless
+        Rule 1 take-profit applies). In backtesting this rule must be skipped so that
+        a TA2 SELL signal always triggers a SELL trade.
+        We verify by constructing a TA DataFrame that produces a SELL signal (-1) and
+        calling _simulate_currency directly with a tiny simulated holding.
+        """
+        n = MIN_CANDLES_FOR_TA + 2
+        rows = []
+        base_close = 50000.0
+        for i in range(n):
+            rows.append({
+                "Close": base_close + i,
+                "RSI_14": 55.0,
+                "EMA_12": base_close,
+                "EMA_21": base_close,
+                "EMA_26": base_close,
+                "EMA_50": base_close,
+                "EMA_200": base_close - 1000.0,
+                # MACD < MACD_Signal on every candle → always SELL signal
+                "MACD": 1.0,
+                "MACD_Signal": 5.0,
+                "Close_Time_ms": 1_000_000 + i * 3600_000,
+            })
+        ta_df = pd.DataFrame(rows)
+
+        records = self.bt._simulate_currency("BTC", ta_df)
+        # All signals should be SELL (-1 raw TA2) mapped directly; no HOLD due to Rule 3.
+        for rec in records:
+            self.assertEqual(rec["ta_signal"], -1)
+            self.assertEqual(rec["signal"], "SELL")
+
 
 class TestBacktestSaveResults(unittest.TestCase):
     def setUp(self):
