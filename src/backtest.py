@@ -9,14 +9,15 @@ historiken.
 TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) som används i live-
 rebalansering tillämpas INTE, för att ge en rättvisande bild av TA2-strategin i sig.
 
-Resultatet sparas i DATA_AREA_ROOT_DIR/output/backtesting.csv.
+Resultaten sparas som en fil per valuta i
+DATA_AREA_ROOT_DIR/output/backtesting/<CURRENCY>_backtesting.csv.
 
 Varje rad i resultatet representerar ett ljus (candle) för en valuta och innehåller:
 - timestamp_ms: tidsstämpel (Close_Time_ms eller Open_Time_ms)
 - currency: valutasymbol
 - close: stängningspris vid detta ljus
 - ta_signal: rå TA2-signal (-1=SÄLJA, 0=HÅLLA, 1=KÖPA)
-- signal: rekommenderad åtgärd efter åsidosättningsregler (BUY/SELL/HOLD)
+- signal: rekommenderad åtgärd (BUY/SELL/HOLD)
 - trade_executed: simulerat utfört köp/sälj/håll
 - cash_usdc: tillgänglig kassa i USDC efter handel
 - holdings: antal enheter av valutan i portföljen
@@ -54,7 +55,7 @@ class Backtest:
         self.cfg = cfg
         self.data_root = Path(cfg.data_area_root_dir)
         self.history_root = self.data_root / "history"
-        self.output_root = self.data_root / "output"
+        self.output_root = self.data_root / "output" / "backtesting"
 
         # Återanvänd TechnicalAnalysis för indikatorberäkningar
         self._ta = TechnicalAnalysis(cfg)
@@ -213,10 +214,13 @@ class Backtest:
 
         return records
 
-    def _save_results(self, records: List[Dict]) -> bool:
-        """Spara backtestresultat till CSV-fil."""
+    def _save_results(self, currency: str, records: List[Dict]) -> bool:
+        """Spara backtestresultat för en valuta till CSV-fil.
+
+        Filen sparas som <currency>_backtesting.csv i output_root.
+        """
         self.output_root.mkdir(parents=True, exist_ok=True)
-        output_file = self.output_root / "backtesting.csv"
+        output_file = self.output_root / f"{currency}_backtesting.csv"
 
         fieldnames = [
             "timestamp_ms",
@@ -239,13 +243,14 @@ class Backtest:
             log.info("Backtestresultat sparat: %s (%d rader)", output_file, len(records))
             return True
         except Exception as e:
-            log.error("Fel vid sparande av backtestresultat: %s", e)
+            log.error("Fel vid sparande av backtestresultat för %s: %s", currency, e)
             return False
 
     def run(self) -> bool:
         """
         Kör backtesting för alla konfigurerade valutor.
 
+        Sparar en CSV per valuta i output_root/<CURRENCY>_backtesting.csv.
         Returnerar True vid framgång, False vid fel.
         """
         log.info("=== Startar Backtest (TA2) ===")
@@ -255,7 +260,10 @@ class Backtest:
             self.cfg.currencies,
         )
 
-        all_records: List[Dict] = []
+        # Säkerställ att utdatakatalogen finns innan vi börjar
+        self.output_root.mkdir(parents=True, exist_ok=True)
+
+        success = True
 
         for currency in self.cfg.currencies:
             currency_upper = currency.upper()
@@ -272,13 +280,12 @@ class Backtest:
                 continue
 
             records = self._simulate_currency(currency_upper, ta_df)
-            all_records.extend(records)
             log.info("Backtest %s: %d poster genererade", currency_upper, len(records))
 
-        if not all_records:
-            log.warning("Inga backtestposter genererades")
+            if not self._save_results(currency_upper, records):
+                success = False
 
-        return self._save_results(all_records)
+        return success
 
 
 def backtest_main(cfg: Config) -> None:

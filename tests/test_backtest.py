@@ -272,21 +272,22 @@ class TestBacktestSaveResults(unittest.TestCase):
                 "total_value_usdc": 1000.0,
             }
         ]
-        result = self.bt._save_results(records)
+        result = self.bt._save_results("BTC", records)
         self.assertTrue(result)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         self.assertTrue(output_file.exists())
 
     def test_save_empty_records_creates_csv_with_header(self):
-        result = self.bt._save_results([])
+        result = self.bt._save_results("BTC", [])
         self.assertTrue(result)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         self.assertTrue(output_file.exists())
         with open(output_file, encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
         self.assertIn("timestamp_ms", header)
         self.assertIn("currency", header)
+        self.assertIn("signal", header)
         self.assertIn("total_value_usdc", header)
 
     def test_save_records_readable_by_pandas(self):
@@ -305,10 +306,19 @@ class TestBacktestSaveResults(unittest.TestCase):
             }
             for i in range(5)
         ]
-        self.bt._save_results(records)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
+        self.bt._save_results("BTC", records)
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         df = pd.read_csv(output_file)
         self.assertEqual(len(df), 5)
+
+    def test_save_different_currencies_produce_separate_files(self):
+        """Each currency should get its own output file."""
+        for currency in ("BTC", "ETH"):
+            self.bt._save_results(currency, [])
+        btc_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
+        eth_file = Path(self.tmp) / "output" / "backtesting" / "ETH_backtesting.csv"
+        self.assertTrue(btc_file.exists())
+        self.assertTrue(eth_file.exists())
 
 
 class TestBacktestRun(unittest.TestCase):
@@ -319,26 +329,24 @@ class TestBacktestRun(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_run_creates_output_file(self):
-        """A complete run with sufficient data should create backtesting.csv."""
+        """A complete run with sufficient data should create BTC_backtesting.csv."""
         cfg = _make_cfg(self.tmp, currencies=["BTC"])
         _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 20)
         bt = Backtest(cfg)
         success = bt.run()
         self.assertTrue(success)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         self.assertTrue(output_file.exists())
 
-    def test_run_with_missing_history_still_saves_empty_csv(self):
-        """If no history data exists, run should still save an empty CSV."""
+    def test_run_with_missing_history_still_succeeds(self):
+        """If no history data exists, run should still return True."""
         cfg = _make_cfg(self.tmp, currencies=["BTC"])
         bt = Backtest(cfg)
         success = bt.run()
         self.assertTrue(success)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
-        self.assertTrue(output_file.exists())
 
-    def test_run_with_multiple_currencies(self):
-        """Multiple currencies should each contribute records."""
+    def test_run_with_multiple_currencies_creates_separate_files(self):
+        """Multiple currencies should each get their own output file."""
         cfg = _make_cfg(self.tmp, currencies=["BTC", "ETH"])
         _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 10)
         _write_history_csv(self.tmp, "ETH", n_rows=MIN_CANDLES_FOR_TA + 10,
@@ -346,10 +354,25 @@ class TestBacktestRun(unittest.TestCase):
         bt = Backtest(cfg)
         success = bt.run()
         self.assertTrue(success)
-        output_file = Path(self.tmp) / "output" / "backtesting.csv"
+        btc_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
+        eth_file = Path(self.tmp) / "output" / "backtesting" / "ETH_backtesting.csv"
+        self.assertTrue(btc_file.exists())
+        self.assertTrue(eth_file.exists())
+        btc_df = pd.read_csv(btc_file)
+        eth_df = pd.read_csv(eth_file)
+        self.assertTrue(all(btc_df["currency"] == "BTC"))
+        self.assertTrue(all(eth_df["currency"] == "ETH"))
+
+    def test_output_csv_contains_signal_column(self):
+        """Output CSV must include the 'signal' column."""
+        cfg = _make_cfg(self.tmp, currencies=["BTC"])
+        _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 5)
+        bt = Backtest(cfg)
+        bt.run()
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
         df = pd.read_csv(output_file)
-        self.assertIn("BTC", df["currency"].values)
-        self.assertIn("ETH", df["currency"].values)
+        self.assertIn("signal", df.columns)
+        self.assertIn("ta_signal", df.columns)
 
 
 class TestBacktestCLIArgument(unittest.TestCase):
