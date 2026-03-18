@@ -18,6 +18,7 @@ from .create_trade_plan import create_trade_plan_main
 from .execute_trade_plan import execute_trade_plan_main
 from .visualize_history import visualize_history_main
 from .ftp_upload import ftp_upload_main
+from .backtest import backtest_main
 
 
 def main():
@@ -72,6 +73,11 @@ def main():
         "--ftp-upload",
         action="store_true",
         help="Ladda upp HTML-filer som matchar FTP_HTML_REGEXP via FTP",
+    )
+    parser.add_argument(
+        "--backtest",
+        action="store_true",
+        help="Kör historisk simulering (backtesting) med TA2 och rebalansering på nedladdad historikdata",
     )
     args = parser.parse_args()
 
@@ -134,6 +140,10 @@ def main():
     if args.ftp_upload:
         print("Laddar upp HTML-filer via FTP (FtpUpload)...")
         ftp_upload_main(cfg)
+
+    if args.backtest:
+        print("Startar historisk simulering (Backtest)...")
+        backtest_main(cfg)
 
     print("\nKlar.")
 
