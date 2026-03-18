@@ -653,7 +653,6 @@ class VisualizeHistory:
                         ),
                         text=buy_labels,
                         hovertemplate="%{text}<extra></extra>",
-                        customdata=buy_labels,
                     ),
                     row=1, col=1,
                 )
@@ -673,7 +672,6 @@ class VisualizeHistory:
                         ),
                         text=sell_labels,
                         hovertemplate="%{text}<extra></extra>",
-                        customdata=sell_labels,
                     ),
                     row=1, col=1,
                 )
@@ -752,20 +750,6 @@ class VisualizeHistory:
             for i, c in enumerate(all_keys)
         )
 
-        info_box_html = (
-            '<div id="trade-info" style="'
-            "display:none; position:fixed; top:80px; right:20px; "
-            "background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; "
-            "border-radius:8px; padding:16px; max-width:320px; "
-            "font-family:monospace; font-size:13px; z-index:9999; "
-            'box-shadow:0 4px 16px rgba(0,0,0,0.5);">'
-            '<button onclick="this.parentElement.style.display=\'none\'" '
-            'style="float:right;background:none;border:none;color:#cdd6f4;'
-            'font-size:16px;cursor:pointer;">✕</button>'
-            "<b>Handelsinformation</b><br><br>"
-            "</div>"
-        )
-
         key_json = ", ".join(f'"{c}"' for c in all_keys)
 
         combined_js = (
@@ -805,19 +789,6 @@ class VisualizeHistory:
             "}\n"
             "window.addEventListener('load', function() {\n"
             "  if (_currencies.length > 0) applyLastMonth('chart-' + _currencies[0]);\n"
-            "  _currencies.forEach(function(c) {\n"
-            "    var el = document.getElementById('chart-' + c);\n"
-            "    if (el) el.on('plotly_click', function(data) {\n"
-            "      var pt = data.points[0];\n"
-            "      var box = document.getElementById('trade-info');\n"
-            "      if (pt && pt.customdata) {\n"
-            "        box.innerHTML = pt.customdata.replace(/<br>/g, '<br>');\n"
-            "        box.style.display = 'block';\n"
-            "      } else {\n"
-            "        box.style.display = 'none';\n"
-            "      }\n"
-            "    });\n"
-            "  });\n"
             "});\n"
         )
 
@@ -852,7 +823,6 @@ class VisualizeHistory:
             f'<span class="vh-created-at">{created_at}</span>\n'
             "</div>\n"
             f"{chart_sections}\n"
-            f"{info_box_html}\n"
             f"<script>{combined_js}</script>\n"
             "</body>\n"
             "</html>"

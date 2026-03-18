@@ -497,7 +497,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("vh-tab", content)
         self.assertIn('id="tab-BTC"', content)
         self.assertIn("BTC", content)
-        self.assertIn("trade-info", content)
+        self.assertNotIn("trade-info", content)
 
     def test_run_html_contains_created_at_timestamp(self):
         """HTML output should contain a creation timestamp in Europe/Stockholm timezone."""
