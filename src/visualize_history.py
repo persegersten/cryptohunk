@@ -2,7 +2,7 @@
 """
 VisualizeHistory - Generera interaktivt kurshistorikdiagram med köp/säljmarkeringar.
 
-Läser kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv
+Läser kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>_history.csv
 och tradehistorik från DATA_AREA_ROOT_DIR/trades/trades.json.
 
 Genererar ett interaktivt HTML-dokument med alla valutor och en dropdown-meny för
@@ -48,7 +48,7 @@ class VisualizeHistory:
 
     def _read_history(self, currency: str) -> Optional[pd.DataFrame]:
         """Läs kurshistorik för angiven valuta."""
-        csv_file = self.history_root / currency / f"{currency}_history.csv"
+        csv_file = self.history_root / f"{currency}_history.csv"
         if not csv_file.exists():
             log.warning("Historikfil saknas för %s: %s", currency, csv_file)
             return None

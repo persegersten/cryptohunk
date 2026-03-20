@@ -48,7 +48,7 @@ def test_integration():
         
         # Create sample history files
         for currency in cfg.currencies:
-            history_dir = data_root / "history" / currency
+            history_dir = data_root / "history"
             history_dir.mkdir(parents=True, exist_ok=True)
             
             # Create realistic test data
@@ -90,7 +90,7 @@ def test_integration():
         
         # Verify output files
         for currency in cfg.currencies:
-            ta_file = data_root / "ta" / currency / f"{currency}_ta.csv"
+            ta_file = data_root / "ta" / f"{currency}_ta.csv"
             if not ta_file.exists():
                 print(f"✗ TA file not created for {currency}")
                 return False

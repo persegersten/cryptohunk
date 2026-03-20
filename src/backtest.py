@@ -2,7 +2,7 @@
 """
 Backtest - Historisk simulering av TA2-strategin på nedladdad historikdata.
 
-Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv,
+Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>_history.csv,
 beräknar tekniska indikatorer och simulerar TA2-signaler över hela den tillgängliga
 historiken.
 
@@ -55,7 +55,7 @@ class Backtest:
 
     def _load_history(self, currency: str) -> Optional[pd.DataFrame]:
         """Läs historik-CSV för en valuta. Returnerar None vid fel."""
-        csv_file = self.history_root / currency / f"{currency}_history.csv"
+        csv_file = self.history_root / f"{currency}_history.csv"
         if not csv_file.exists():
             log.error("Historikfil saknas för %s: %s", currency, csv_file)
             return None
