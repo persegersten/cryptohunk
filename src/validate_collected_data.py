@@ -5,6 +5,8 @@ ValidateCollectedData
 Validerar att insamlad data finns på väntade platser och i förväntat antal:
 - För varje valuta i Config.currencies ska det finnas exakt 1 fil i:
   DATA_AREA_ROOT_DIR/history/<CURRENCY>/
+- För varje valuta i Config.currencies ska det finnas exakt 1 fil i:
+  DATA_AREA_ROOT_DIR/ta/<CURRENCY>/
 - Precis 1 fil i DATA_AREA_ROOT_DIR/portfolio/
 - Precis 1 fil i DATA_AREA_ROOT_DIR/trades/
 
@@ -99,6 +101,29 @@ class ValidateCollectedData:
             res_ok.append(files[0].name)
         return {"ok": res_ok, "errors": res_err}
 
+    def _check_ta(self) -> Dict[str, List[str]]:
+        """
+        Kontrollera ta/<currency>/ för varje currency i cfg.currencies.
+        Returnerar dict med nycklar 'ok' (list of currencies ok) och 'errors' (list of felmeddelanden).
+        """
+        res_ok: List[str] = []
+        res_err: List[str] = []
+
+        ta_root = self.data_root / "ta"
+        for cur in self.cfg.currencies:
+            cur_dir = ta_root / cur
+            files = self._list_regular_files(cur_dir)
+            if not cur_dir.exists():
+                res_err.append(f"TA-mappen saknas för valuta '{cur}': {cur_dir}")
+            elif len(files) == 0:
+                res_err.append(f"Ingen fil hittades i {cur_dir} för valuta '{cur}'")
+            elif len(files) > 1:
+                names = ", ".join([f.name for f in files])
+                res_err.append(f"Flera filer hittades i {cur_dir} för valuta '{cur}': {names}")
+            else:
+                res_ok.append(f"{cur} -> {files[0].name}")
+        return {"ok": res_ok, "errors": res_err}
+
     def run(self) -> bool:
         """
         Kör alla valideringar. Loggar resultat och returnerar True om allt är OK, annars False.
@@ -111,6 +136,10 @@ class ValidateCollectedData:
         hist = self._check_history()
         ok_messages.extend([f"HISTORY: {m}" for m in hist["ok"]])
         problems.extend([f"HISTORY: {e}" for e in hist["errors"]])
+
+        ta = self._check_ta()
+        ok_messages.extend([f"TA: {m}" for m in ta["ok"]])
+        problems.extend([f"TA: {e}" for e in ta["errors"]])
 
         port = self._check_portfolio()
         ok_messages.extend([f"PORTFOLIO: {m}" for m in port["ok"]])
@@ -130,7 +159,7 @@ class ValidateCollectedData:
                 log.error(" - %s", p)
             return False
 
-        log.info("Validering lyckades: korrekt antal filer för history/portfolio/trades.")
+        log.info("Validering lyckades: korrekt antal filer för history/ta/portfolio/trades.")
         return True
 
 
