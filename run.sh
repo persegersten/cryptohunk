@@ -8,7 +8,6 @@ export CURRENCY_HISTORY_NOF_ELEMENTS="100"
 export TRADE_THRESHOLD="10"
 export TAKE_PROFIT_PERCENTAGE="6.0"
 export STOP_LOSS_PERCENTAGE="6.0"
-export DRY_RUN="true"
 
 #
 # sedan:
