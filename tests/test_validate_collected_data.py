@@ -44,9 +44,9 @@ def _make_cfg(tmp_dir: str) -> Config:
 
 def _create_full_data(root: Path) -> None:
     """Skapa en komplett mappstruktur med alla nödvändiga filer."""
+    (root / "history").mkdir(parents=True, exist_ok=True)
     for cur in ["BTC", "ETH"]:
-        (root / "history" / cur).mkdir(parents=True, exist_ok=True)
-        (root / "history" / cur / f"{cur}_history.csv").write_text("data")
+        (root / "history" / f"{cur}_history.csv").write_text("data")
     (root / "ta").mkdir(parents=True, exist_ok=True)
     for cur in ["BTC", "ETH"]:
         (root / "ta" / f"{cur}_ta.csv").write_text("data")

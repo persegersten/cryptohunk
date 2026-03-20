@@ -4,7 +4,7 @@ ValidateCollectedData
 
 Validerar att insamlad data finns på väntade platser och i förväntat antal:
 - För varje valuta i Config.currencies ska det finnas exakt 1 fil i:
-  DATA_AREA_ROOT_DIR/history/<CURRENCY>/
+  DATA_AREA_ROOT_DIR/history/<CURRENCY>_history.csv
 - För varje valuta i Config.currencies ska det finnas exakt 1 fil i:
   DATA_AREA_ROOT_DIR/ta/<CURRENCY>_ta.csv
 - Precis 1 fil i DATA_AREA_ROOT_DIR/portfolio/
@@ -40,7 +40,7 @@ class ValidateCollectedData:
 
     def _check_history(self) -> Dict[str, List[str]]:
         """
-        Kontrollera history/<currency>/ för varje currency i cfg.currencies.
+        Kontrollera att history/<currency>_history.csv finns för varje currency i cfg.currencies.
         Returnerar dict med nycklar 'ok' (list of currencies ok) och 'errors' (list of felmeddelanden).
         """
         res_ok: List[str] = []
@@ -48,17 +48,11 @@ class ValidateCollectedData:
 
         history_root = self.data_root / "history"
         for cur in self.cfg.currencies:
-            cur_dir = history_root / cur
-            files = self._list_regular_files(cur_dir)
-            if not cur_dir.exists():
-                res_err.append(f"History-mappen saknas för valuta '{cur}': {cur_dir}")
-            elif len(files) == 0:
-                res_err.append(f"Ingen fil hittades i {cur_dir} för valuta '{cur}'")
-            elif len(files) > 1:
-                names = ", ".join([f.name for f in files])
-                res_err.append(f"Flera filer hittades i {cur_dir} för valuta '{cur}': {names}")
+            hist_file = history_root / f"{cur}_history.csv"
+            if not hist_file.exists():
+                res_err.append(f"History-filen saknas för valuta '{cur}': {hist_file}")
             else:
-                res_ok.append(f"{cur} -> {files[0].name}")
+                res_ok.append(f"{cur} -> {hist_file.name}")
         return {"ok": res_ok, "errors": res_err}
 
     def _check_portfolio(self) -> Dict[str, List[str]]:

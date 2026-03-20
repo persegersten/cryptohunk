@@ -99,7 +99,7 @@ class TestVisualizeHistory(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_read_history_returns_dataframe(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         df = viz._read_history("BTC")
@@ -215,7 +215,7 @@ class TestVisualizeHistory(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_generate_chart_returns_html(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
 
         trades = [
@@ -245,7 +245,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_generate_chart_sell_label_includes_pct_change_vs_buy(self):
         """Sell marker label must include percentage change vs. the preceding buy."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
 
         # Buy at 40000, sell at 42000 → +5.00 %
@@ -272,7 +272,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("+5.00%", html_content)
 
     def test_generate_chart_without_trades(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
@@ -281,7 +281,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_generate_chart_has_rangeselector_buttons(self):
         """Verify time-range selector buttons are present in the generated HTML."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
@@ -305,7 +305,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_build_portfolio_performance_returns_empty_without_trades(self):
         """Without any trades, holdings are zero → empty result."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
@@ -319,7 +319,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_build_portfolio_performance_first_value_is_usdc(self):
         """After a buy, first data point with holdings should equal qty × close_price in USDC."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         base_ms = 1_700_000_000_000
         expected_qty = 0.01
         expected_first_price = 40000  # _create_history_csv: prices[0] = 40000 + 0*10
@@ -347,7 +347,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_build_portfolio_performance_sell_reduces_holdings(self):
         """After buying and then selling all, portfolio value should drop to 0."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         # Use an hour-aligned base so that floor('h') maps trades to exactly the
         # expected candle index (Binance klines are always on UTC-hour boundaries).
         base_ms = 1_699_999_200_000  # 2023-11-14 22:00:00 UTC
@@ -382,7 +382,7 @@ class TestVisualizeHistory(unittest.TestCase):
         first_price = 40000
         expected_first_value = btc_qty * first_price + eth_qty * first_price
         for currency in ["BTC", "ETH"]:
-            hist_dir = self.data_root / "history" / currency
+            hist_dir = self.data_root / "history"
             _create_history_csv(hist_dir, currency, n=10)
         # Anchor backward reconstruction to current balances from portfolio.json
         _create_portfolio_json(self.data_root, {"BTC": btc_qty, "ETH": eth_qty})
@@ -407,7 +407,7 @@ class TestVisualizeHistory(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_generate_portfolio_chart_returns_none_without_trades(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
@@ -415,7 +415,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_generate_portfolio_chart_returns_html_with_trades(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
         # Anchor backward reconstruction to current balance
@@ -432,7 +432,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("chart-Performance", html_content)
 
     def test_generate_portfolio_chart_has_rangeselector(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
         # Anchor backward reconstruction to current balance
@@ -454,7 +454,7 @@ class TestVisualizeHistory(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_run_includes_portfolio_tab_when_trades_present(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
         trades = [
@@ -475,7 +475,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("chart-Performance", content)
 
     def test_run_omits_portfolio_tab_when_no_trades(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
@@ -486,7 +486,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertNotIn('id="tab-Performance"', content)
 
     def test_run_generates_all_charts(self):
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
@@ -505,7 +505,7 @@ class TestVisualizeHistory(unittest.TestCase):
         from zoneinfo import ZoneInfo
 
         tz_sthlm = ZoneInfo("Europe/Stockholm")
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         before = datetime.now(tz=tz_sthlm).replace(second=0, microsecond=0)
@@ -531,7 +531,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_combined_html_has_apply_last_month_js(self):
         """Combined HTML must contain applyLastMonth JS called on load and on tab switch."""
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
@@ -561,7 +561,7 @@ class TestVisualizeHistory(unittest.TestCase):
         """_write_debug_csv should create debug.csv with expected columns."""
         base_ms = self._recent_base_ms(50)
         for currency in ["BNB", "ETH"]:
-            hist_dir = self.data_root / "history" / currency
+            hist_dir = self.data_root / "history"
             _create_history_csv(hist_dir, currency, n=50, base_ms=base_ms)
 
         cfg = Config(
@@ -599,7 +599,7 @@ class TestVisualizeHistory(unittest.TestCase):
     def test_write_debug_csv_sum_equals_components(self):
         """SUM column should equal the sum of all currency USDC value columns plus USDC holdings."""
         base_ms = self._recent_base_ms(10)
-        hist_dir = self.data_root / "history" / "BNB"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
 
         cfg = Config(
@@ -636,7 +636,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_write_debug_csv_not_created_for_old_data(self):
         """If all history data is older than 7 days, debug.csv should not be written."""
-        hist_dir = self.data_root / "history" / "BNB"
+        hist_dir = self.data_root / "history"
         # Use the old default base_ms (2023) which is definitely more than a week ago
         _create_history_csv(hist_dir, "BNB", n=10)
 
@@ -665,7 +665,7 @@ class TestVisualizeHistory(unittest.TestCase):
     def test_run_writes_debug_csv_with_recent_data(self):
         """run() should write debug.csv when recent price history is available."""
         base_ms = self._recent_base_ms(50)
-        hist_dir = self.data_root / "history" / "BTC"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50, base_ms=base_ms)
         viz = VisualizeHistory(self.cfg)
         success = viz.run()
@@ -676,7 +676,7 @@ class TestVisualizeHistory(unittest.TestCase):
     def test_write_debug_csv_usdc_anchored_to_portfolio_balance(self):
         """USDC column should be anchored to the current balance from portfolio.json."""
         base_ms = self._recent_base_ms(10)
-        hist_dir = self.data_root / "history" / "BNB"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
 
         # Write a portfolio.json with a known USDC balance
@@ -734,7 +734,7 @@ class TestVisualizeHistory(unittest.TestCase):
         now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
         base_ms = (now_ms // hour_ms - 10) * hour_ms  # aligned to UTC-hour boundary
 
-        hist_dir = self.data_root / "history" / "BNB"
+        hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BNB", n=10, base_ms=base_ms)
 
         # Current BNB balance as known from the exchange.

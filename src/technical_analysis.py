@@ -2,7 +2,7 @@
 """
 TechnicalAnalysis - Beräkna tekniska indikatorer på kurshistorik.
 
-Läser in kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv
+Läser in kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>_history.csv
 Beräknar följande tekniska indikatorer:
 - RSI (14 perioder)
 - EMA (12 perioder)
@@ -46,8 +46,7 @@ class TechnicalAnalysis:
         Läs kurshistorik från CSV-fil för given valuta.
         Returnerar DataFrame med Close-pris eller None vid fel.
         """
-        currency_dir = self.history_root / currency
-        csv_file = currency_dir / f"{currency}_history.csv"
+        csv_file = self.history_root / f"{currency}_history.csv"
 
         if not csv_file.exists():
             log.error("Historikfil saknas för %s: %s", currency, csv_file)

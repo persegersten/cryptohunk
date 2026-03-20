@@ -48,7 +48,7 @@ def test_integration():
         
         # Create sample history files
         for currency in cfg.currencies:
-            history_dir = data_root / "history" / currency
+            history_dir = data_root / "history"
             history_dir.mkdir(parents=True, exist_ok=True)
             
             # Create realistic test data

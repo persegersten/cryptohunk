@@ -58,7 +58,7 @@ def _make_cfg(tmp_dir: str, currencies=None) -> Config:
 def _write_history_csv(tmp_dir: str, currency: str, n_rows: int = 250,
                        start_close: float = 50000.0) -> None:
     """Skapa en minimal historik-CSV med stigande priser."""
-    hist_dir = Path(tmp_dir) / "history" / currency
+    hist_dir = Path(tmp_dir) / "history"
     hist_dir.mkdir(parents=True, exist_ok=True)
     csv_file = hist_dir / f"{currency}_history.csv"
 

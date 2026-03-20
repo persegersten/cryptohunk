@@ -27,7 +27,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         """Skapa temporär testmiljö."""
         self.test_dir = tempfile.mkdtemp()
         self.data_root = Path(self.test_dir)
-        self.history_dir = self.data_root / "history" / "BTC"
+        self.history_dir = self.data_root / "history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
 
         # Skapa mock-config
@@ -224,7 +224,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
     def test_ema_200_with_insufficient_data(self):
         """Testa att EMA_200 hanteras korrekt även med färre än 200 datapunkter."""
         # Skapa ny config med bara 100 datapunkter
-        short_history_dir = self.data_root / "history" / "ETH"
+        short_history_dir = self.data_root / "history"
         short_history_dir.mkdir(parents=True, exist_ok=True)
         
         # Skapa kort historikfil
