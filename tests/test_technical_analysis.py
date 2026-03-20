@@ -194,7 +194,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(success)
         
         # Verifiera att filen skapades
-        ta_file = self.data_root / "ta" / "BTC" / "BTC_ta.csv"
+        ta_file = self.data_root / "ta" / "BTC_ta.csv"
         self.assertTrue(ta_file.exists())
         
         # Verifiera att filen kan läsas och har rätt innehåll
@@ -209,7 +209,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(success)
         
         # Verifiera att TA-fil skapades
-        ta_file = self.data_root / "ta" / "BTC" / "BTC_ta.csv"
+        ta_file = self.data_root / "ta" / "BTC_ta.csv"
         self.assertTrue(ta_file.exists())
         
         # Läs och verifiera innehållet

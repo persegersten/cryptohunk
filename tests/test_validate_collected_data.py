@@ -47,8 +47,9 @@ def _create_full_data(root: Path) -> None:
     for cur in ["BTC", "ETH"]:
         (root / "history" / cur).mkdir(parents=True, exist_ok=True)
         (root / "history" / cur / f"{cur}_history.csv").write_text("data")
-        (root / "ta" / cur).mkdir(parents=True, exist_ok=True)
-        (root / "ta" / cur / f"{cur}_ta.csv").write_text("data")
+    (root / "ta").mkdir(parents=True, exist_ok=True)
+    for cur in ["BTC", "ETH"]:
+        (root / "ta" / f"{cur}_ta.csv").write_text("data")
     (root / "portfolio").mkdir(parents=True, exist_ok=True)
     (root / "portfolio" / "portfolio.json").write_text("{}")
     (root / "trades").mkdir(parents=True, exist_ok=True)
@@ -69,51 +70,47 @@ class TestCheckTa(unittest.TestCase):
 
     def test_check_ta_ok(self):
         """Exakt 1 TA-fil per valuta ska ge inga fel."""
+        (self.root / "ta").mkdir(parents=True, exist_ok=True)
         for cur in ["BTC", "ETH"]:
-            (self.root / "ta" / cur).mkdir(parents=True)
-            (self.root / "ta" / cur / f"{cur}_ta.csv").write_text("data")
+            (self.root / "ta" / f"{cur}_ta.csv").write_text("data")
 
         result = self.validator._check_ta()
         self.assertEqual(result["errors"], [])
         self.assertEqual(len(result["ok"]), 2)
 
     def test_check_ta_missing_dir(self):
-        """Saknad TA-mapp för en valuta ska ge fel."""
+        """Saknad TA-fil för en valuta ska ge fel."""
         # Skapa bara för BTC, inte ETH
-        (self.root / "ta" / "BTC").mkdir(parents=True)
-        (self.root / "ta" / "BTC" / "BTC_ta.csv").write_text("data")
+        (self.root / "ta").mkdir(parents=True, exist_ok=True)
+        (self.root / "ta" / "BTC_ta.csv").write_text("data")
 
         result = self.validator._check_ta()
         self.assertEqual(len(result["errors"]), 1)
         self.assertIn("ETH", result["errors"][0])
 
     def test_check_ta_empty_dir(self):
-        """Tom TA-mapp ska ge fel."""
-        for cur in ["BTC", "ETH"]:
-            (self.root / "ta" / cur).mkdir(parents=True)
+        """Tom TA-mapp (inga filer alls) ska ge fel för alla valutor."""
+        (self.root / "ta").mkdir(parents=True, exist_ok=True)
 
         result = self.validator._check_ta()
         self.assertEqual(len(result["errors"]), 2)
 
     def test_check_ta_multiple_files(self):
-        """Flera filer i TA-mappen ska ge fel."""
-        (self.root / "ta" / "BTC").mkdir(parents=True)
-        (self.root / "ta" / "BTC" / "BTC_ta.csv").write_text("data")
-        (self.root / "ta" / "BTC" / "BTC_ta_extra.csv").write_text("data")
-        (self.root / "ta" / "ETH").mkdir(parents=True)
-        (self.root / "ta" / "ETH" / "ETH_ta.csv").write_text("data")
+        """Exakt en fil per valuta; övriga valutor utan fil ska ge fel."""
+        (self.root / "ta").mkdir(parents=True, exist_ok=True)
+        (self.root / "ta" / "BTC_ta.csv").write_text("data")
+        # ETH saknar fil
 
         result = self.validator._check_ta()
         self.assertEqual(len(result["errors"]), 1)
-        self.assertIn("BTC", result["errors"][0])
+        self.assertIn("ETH", result["errors"][0])
 
     def test_check_ta_hidden_files_ignored(self):
-        """Dolda filer ska ignoreras vid filräkning."""
-        (self.root / "ta" / "BTC").mkdir(parents=True)
-        (self.root / "ta" / "BTC" / "BTC_ta.csv").write_text("data")
-        (self.root / "ta" / "BTC" / ".hidden").write_text("hidden")
-        (self.root / "ta" / "ETH").mkdir(parents=True)
-        (self.root / "ta" / "ETH" / "ETH_ta.csv").write_text("data")
+        """Dolda filer ska inte räknas som TA-filer; TA-fil ska fortfarande hittas."""
+        (self.root / "ta").mkdir(parents=True, exist_ok=True)
+        for cur in ["BTC", "ETH"]:
+            (self.root / "ta" / f"{cur}_ta.csv").write_text("data")
+        (self.root / "ta" / ".hidden").write_text("hidden")
 
         result = self.validator._check_ta()
         self.assertEqual(result["errors"], [])

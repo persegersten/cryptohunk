@@ -90,7 +90,7 @@ def test_integration():
         
         # Verify output files
         for currency in cfg.currencies:
-            ta_file = data_root / "ta" / currency / f"{currency}_ta.csv"
+            ta_file = data_root / "ta" / f"{currency}_ta.csv"
             if not ta_file.exists():
                 print(f"✗ TA file not created for {currency}")
                 return False

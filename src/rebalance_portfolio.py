@@ -3,7 +3,7 @@
 RebalancePortfolio - Generate buy/sell recommendations based on TA signals and holdings.
 
 This module:
-1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv
+1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 2. Reads portfolio summary from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
 3. Calculates TA scores based on (TA strategy):
    - RSI_14 < 30: +1, RSI_14 > 70: -1
@@ -59,7 +59,7 @@ class RebalancePortfolio:
         Returns:
             DataFrame with TA indicators or None if not found
         """
-        ta_file = self.ta_root / currency / f"{currency}_ta.csv"
+        ta_file = self.ta_root / f"{currency}_ta.csv"
         
         if not ta_file.exists():
             log.warning(f"TA file not found for {currency}: {ta_file}")

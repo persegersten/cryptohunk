@@ -12,7 +12,7 @@ Beräknar följande tekniska indikatorer:
 - EMA (200 perioder)
 - MACD
 
-Sparar resultatet i DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv
+Sparar resultatet i DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 """
 from __future__ import annotations
 
@@ -178,10 +178,9 @@ class TechnicalAnalysis:
         Returns:
             True vid succé, False vid fel
         """
-        currency_dir = self.ta_root / currency
-        self._ensure_dir(currency_dir)
+        self._ensure_dir(self.ta_root)
         
-        csv_file = currency_dir / f"{currency}_ta.csv"
+        csv_file = self.ta_root / f"{currency}_ta.csv"
         
         try:
             ta_df.to_csv(csv_file, index=False)

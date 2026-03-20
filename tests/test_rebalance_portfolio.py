@@ -78,10 +78,7 @@ class TestRebalancePortfolio(unittest.TestCase):
     def _create_ta_file(self, currency: str, rsi: float, ema_12: float, ema_26: float,
                         macd: float, macd_signal: float, close: float, ema_200: float):
         """Create a TA CSV file for testing."""
-        currency_dir = self.ta_dir / currency
-        currency_dir.mkdir(parents=True, exist_ok=True)
-        
-        ta_file = currency_dir / f"{currency}_ta.csv"
+        ta_file = self.ta_dir / f"{currency}_ta.csv"
         data = {
             'Open_Time_ms': [1000000, 1001000, 1002000],
             'Close_Time_ms': [1000999, 1001999, 1002999],
