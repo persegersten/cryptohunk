@@ -110,16 +110,16 @@ def main():
     if args.collect_data:
         print("Startar insamling av data (CollectData)...")
         collect_data_all(cfg)
-        
-        print("Startar validering av insamlad data...")
-        validate_collected_data(cfg)
-        
+
         print("Startar sammanställning av portfolio...")
         summarize_portfolio_main(cfg)
 
     if args.run_ta or args.run_ta2:
         print("Startar teknisk analys (TechnicalAnalysis)...")
         technical_analysis_main(cfg)
+
+        print("Startar validering av insamlad data...")
+        validate_collected_data(cfg)
 
     if args.rebalance_portfolio:
         print("Startar rebalansering av portfölj (RebalancePortfolio)...")

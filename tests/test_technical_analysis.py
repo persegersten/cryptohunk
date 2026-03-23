@@ -27,7 +27,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         """Skapa temporär testmiljö."""
         self.test_dir = tempfile.mkdtemp()
         self.data_root = Path(self.test_dir)
-        self.history_dir = self.data_root / "history" / "BTC"
+        self.history_dir = self.data_root / "history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
 
         # Skapa mock-config
@@ -194,7 +194,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(success)
         
         # Verifiera att filen skapades
-        ta_file = self.data_root / "ta" / "BTC" / "BTC_ta.csv"
+        ta_file = self.data_root / "ta" / "BTC_ta.csv"
         self.assertTrue(ta_file.exists())
         
         # Verifiera att filen kan läsas och har rätt innehåll
@@ -209,7 +209,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
         self.assertTrue(success)
         
         # Verifiera att TA-fil skapades
-        ta_file = self.data_root / "ta" / "BTC" / "BTC_ta.csv"
+        ta_file = self.data_root / "ta" / "BTC_ta.csv"
         self.assertTrue(ta_file.exists())
         
         # Läs och verifiera innehållet
@@ -224,7 +224,7 @@ class TestTechnicalAnalysis(unittest.TestCase):
     def test_ema_200_with_insufficient_data(self):
         """Testa att EMA_200 hanteras korrekt även med färre än 200 datapunkter."""
         # Skapa ny config med bara 100 datapunkter
-        short_history_dir = self.data_root / "history" / "ETH"
+        short_history_dir = self.data_root / "history"
         short_history_dir.mkdir(parents=True, exist_ok=True)
         
         # Skapa kort historikfil

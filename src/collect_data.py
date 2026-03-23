@@ -140,9 +140,7 @@ class CollectData:
                     log.warning("Ingen data för %s", symbol)
                     continue
 
-                currency_dir = history_root / currency
-                self._ensure_dir(currency_dir)
-                csv_file = currency_dir / f"{currency}_history.csv"
+                csv_file = history_root / f"{currency}_history.csv"
                 self._write_klines_to_csv(klines_data, csv_file)
                 log.info("Kurshistorik sparad för %s: %s", currency, csv_file)
             except Exception as e:

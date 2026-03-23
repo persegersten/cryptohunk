@@ -2,7 +2,7 @@
 """
 TechnicalAnalysis - Beräkna tekniska indikatorer på kurshistorik.
 
-Läser in kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>/<currency>_history.csv
+Läser in kurshistorik från DATA_AREA_ROOT_DIR/history/<currency>_history.csv
 Beräknar följande tekniska indikatorer:
 - RSI (14 perioder)
 - EMA (12 perioder)
@@ -12,7 +12,7 @@ Beräknar följande tekniska indikatorer:
 - EMA (200 perioder)
 - MACD
 
-Sparar resultatet i DATA_AREA_ROOT_DIR/ta/<currency>/<currency>_ta.csv
+Sparar resultatet i DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 """
 from __future__ import annotations
 
@@ -46,8 +46,7 @@ class TechnicalAnalysis:
         Läs kurshistorik från CSV-fil för given valuta.
         Returnerar DataFrame med Close-pris eller None vid fel.
         """
-        currency_dir = self.history_root / currency
-        csv_file = currency_dir / f"{currency}_history.csv"
+        csv_file = self.history_root / f"{currency}_history.csv"
 
         if not csv_file.exists():
             log.error("Historikfil saknas för %s: %s", currency, csv_file)
@@ -178,10 +177,9 @@ class TechnicalAnalysis:
         Returns:
             True vid succé, False vid fel
         """
-        currency_dir = self.ta_root / currency
-        self._ensure_dir(currency_dir)
+        self._ensure_dir(self.ta_root)
         
-        csv_file = currency_dir / f"{currency}_ta.csv"
+        csv_file = self.ta_root / f"{currency}_ta.csv"
         
         try:
             ta_df.to_csv(csv_file, index=False)
