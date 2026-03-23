@@ -681,7 +681,7 @@ class VisualizeHistory:
 
             pct_change = "–"
             if not is_buyer:
-                # Find the most recent BUY for this currency before this SELL
+                # SÄLJ: visa % förändring mot föregående köp
                 preceding_buys = [
                     t for t in trades
                     if str(t.get("symbol", "")).upper().startswith(currency_name)
@@ -699,6 +699,19 @@ class VisualizeHistory:
                             sign = "+" if pct >= 0 else ""
                             pct_change = f"{sign}{pct:.2f}%"
                     except (ValueError, TypeError):
+                        pass
+            else:
+                # KÖP: visa % förändring från köpkurs mot senaste kurs
+                cur_df = dfs.get(currency_name)
+                if cur_df is not None and not cur_df.empty:
+                    try:
+                        latest_price = float(cur_df["Close"].iloc[-1])
+                        buy_price = float(trade.get("price", 0))
+                        if buy_price > 0:
+                            pct = (latest_price - buy_price) / buy_price * 100
+                            sign = "+" if pct >= 0 else ""
+                            pct_change = f"{sign}{pct:.2f}%"
+                    except (ValueError, TypeError, IndexError):
                         pass
 
             trades_rows.append((dt_str, currency_name, amount_str, trade_type, pct_change))
@@ -745,9 +758,9 @@ class VisualizeHistory:
         if not trades_rows:
             trades_tbody = '<tr><td colspan="5" style="text-align:center;color:#6c7086">Inga trades</td></tr>\n'
 
-        log.info("Sammanfattningsfliken byggd")
+        log.info("Overview-fliken byggd")
         return (
-            '<div id="chart-Sammanfattning" style="padding:20px 32px">\n'
+            '<div id="chart-Overview" style="padding:20px 32px">\n'
             '<h2 class="vh-sum-h2">Portföljöversikt</h2>\n'
             '<table class="vh-sum-table">\n'
             "<thead><tr>"
@@ -758,7 +771,7 @@ class VisualizeHistory:
             '<h2 class="vh-sum-h2" style="margin-top:32px">Senaste trades</h2>\n'
             '<table class="vh-sum-table">\n'
             "<thead><tr>"
-            "<th>Datum</th><th>Valuta</th><th>Belopp</th><th>Typ</th><th>Förändring (SÄLJ)</th>"
+            "<th>Datum</th><th>Valuta</th><th>Belopp</th><th>Typ</th><th>Förändring</th>"
             "</tr></thead>\n"
             f"<tbody>\n{trades_tbody}</tbody>\n"
             "</table>\n"
@@ -942,20 +955,20 @@ class VisualizeHistory:
         created_at = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M")
 
         # Separera valutaflikar från specialflikarna
-        _special = {"Performance", "Sammanfattning"}
+        _special = {"Performance", "Overview"}
         currency_keys = [c for c in charts if c not in _special]
         has_portfolio = "Performance" in charts
-        has_summary = "Sammanfattning" in charts
+        has_summary = "Overview" in charts
         all_keys = (
             currency_keys
             + (["Performance"] if has_portfolio else [])
-            + (["Sammanfattning"] if has_summary else [])
+            + (["Overview"] if has_summary else [])
         )
 
         def _tab_button(c: str, active: bool) -> str:
             if c == "Performance":
                 extra_class = " vh-tab-portfolio"
-            elif c == "Sammanfattning":
+            elif c == "Overview":
                 extra_class = " vh-tab-summary"
             else:
                 extra_class = ""
@@ -989,7 +1002,7 @@ class VisualizeHistory:
             "function _tabClass(x, active) {\n"
             "  var cls = 'vh-tab';\n"
             "  if (x === 'Performance') cls += ' vh-tab-portfolio';\n"
-            "  if (x === 'Sammanfattning') cls += ' vh-tab-summary';\n"
+            "  if (x === 'Overview') cls += ' vh-tab-summary';\n"
             "  if (active) cls += ' vh-tab-active';\n"
             "  return cls;\n"
             "}\n"
@@ -1124,11 +1137,11 @@ class VisualizeHistory:
         except Exception as e:
             log.error("Oväntat fel vid generering av portföljdiagram: %s", e)
 
-        # Generera sammanfattningsflik
+        # Generera overview-flik
         try:
-            charts["Sammanfattning"] = self.generate_summary_html(trades, dfs)
+            charts["Overview"] = self.generate_summary_html(trades, dfs)
         except Exception as e:
-            log.error("Oväntat fel vid generering av sammanfattning: %s", e)
+            log.error("Oväntat fel vid generering av overview: %s", e)
 
         self._ensure_dir(self.output_dir)
         html_file = self.output_dir / "history_chart.html"
@@ -1142,7 +1155,7 @@ class VisualizeHistory:
             log.error("Fel vid sparande av kombinerat diagram: %s", e)
             return False
 
-        _special = {"Performance", "Sammanfattning"}
+        _special = {"Performance", "Overview"}
         log.info(
             "VisualizeHistory klar: %d/%d valutadiagram genererade",
             len([c for c in charts if c not in _special]),

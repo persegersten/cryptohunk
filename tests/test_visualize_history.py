@@ -888,7 +888,7 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         html = viz.generate_summary_html([], dfs)
-        self.assertIn('id="chart-Sammanfattning"', html)
+        self.assertIn('id="chart-Overview"', html)
         self.assertIn("Portföljöversikt", html)
         self.assertIn("Senaste trades", html)
         self.assertIn("vh-sum-table", html)
@@ -957,8 +957,28 @@ class TestVisualizeHistory(unittest.TestCase):
         # sell at 42000 vs buy at 40000 → +5.00%
         self.assertIn("+5.00%", html)
 
+    def test_generate_summary_html_buy_shows_pct_change_vs_latest_price(self):
+        """A BUY trade should display percentage change from buy price to latest close price."""
+        hist_dir = self.data_root / "history"
+        # Latest close price = 40000 + 9*10 = 40090 (index -1 of n=10 prices)
+        _create_history_csv(hist_dir, "BTC", n=10)
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html(trades, dfs)
+        # latest close = 40090, buy price = 40000 → +0.23%
+        import math
+        expected_pct = (40090 - 40000) / 40000 * 100
+        sign = "+" if expected_pct >= 0 else ""
+        expected_str = f"{sign}{expected_pct:.2f}%"
+        self.assertIn(expected_str, html)
+
     def test_run_includes_summary_tab(self):
-        """run() should always include the Sammanfattning tab in the generated HTML."""
+        """run() should always include the Overview tab in the generated HTML."""
         hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=50)
         viz = VisualizeHistory(self.cfg)
@@ -967,9 +987,9 @@ class TestVisualizeHistory(unittest.TestCase):
         content = (self.data_root / "visualize" / "history_chart.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn('id="tab-Sammanfattning"', content)
+        self.assertIn('id="tab-Overview"', content)
         self.assertIn("vh-tab-summary", content)
-        self.assertIn('id="chart-Sammanfattning"', content)
+        self.assertIn('id="chart-Overview"', content)
         self.assertIn("Portföljöversikt", content)
         self.assertIn("Senaste trades", content)
 
