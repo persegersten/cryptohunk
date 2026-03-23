@@ -323,6 +323,57 @@ class VisualizeHistory:
         except Exception as e:
             log.error("Fel vid sparande av debug-CSV: %s", e)
 
+    def _read_ta_signal(self, currency: str) -> str:
+        """
+        Läs senaste TA-signal för angiven valuta från ta/<currency>_ta.csv.
+
+        Beräknar ett poäng baserat på RSI, EMA-korsning, MACD och Close vs EMA_200.
+        Returnerar 'KÖP', 'SÄLJ', 'NEUTRAL' eller '–' om ingen TA-data finns.
+        """
+        ta_file = self.data_root / "ta" / f"{currency}_ta.csv"
+        if not ta_file.exists():
+            return "–"
+        try:
+            df = pd.read_csv(ta_file)
+            if df.empty:
+                return "–"
+            row = df.iloc[-1]
+            score = 0
+            try:
+                rsi = float(row["RSI_14"])
+                if rsi < 30:
+                    score += 1
+                elif rsi > 70:
+                    score -= 1
+            except (ValueError, TypeError, KeyError):
+                pass
+            try:
+                ema12 = float(row["EMA_12"])
+                ema26 = float(row["EMA_26"])
+                score += 1 if ema12 > ema26 else -1
+            except (ValueError, TypeError, KeyError):
+                pass
+            try:
+                macd = float(row["MACD"])
+                macd_sig = float(row["MACD_Signal"])
+                score += 1 if macd > macd_sig else -1
+            except (ValueError, TypeError, KeyError):
+                pass
+            try:
+                close = float(row["Close"])
+                ema200 = float(row["EMA_200"])
+                score += 1 if close > ema200 else -1
+            except (ValueError, TypeError, KeyError):
+                pass
+            if score >= 1:
+                return "KÖP"
+            elif score <= -1:
+                return "SÄLJ"
+            return "NEUTRAL"
+        except Exception as e:
+            log.warning("Kunde inte läsa TA-signal för %s: %s", currency, e)
+            return "–"
+
     def _build_portfolio_performance(
         self,
         trades: List[Dict[str, Any]],
@@ -544,6 +595,176 @@ class VisualizeHistory:
             div_id="chart-Performance",
         )
 
+    def generate_summary_html(
+        self,
+        trades: List[Dict[str, Any]],
+        dfs: Dict[str, pd.DataFrame],
+    ) -> str:
+        """
+        Generera HTML-div för sammanfattningsfliken.
+
+        Visar:
+        - Tabell med nuvarande innehav, USDC-värde och senaste TA-signal per valuta
+        - Tabell med senaste tre trades (datum, valuta, belopp, typ, % förändring vid SÄLJ)
+
+        Args:
+            trades: Lista med alla trades
+            dfs: Dict med {valuta: DataFrame med kurshistorik}
+
+        Returns:
+            HTML-sträng (div)
+        """
+        # Read portfolio balances
+        portfolio_balances: Dict[str, float] = {}
+        portfolio_file = self.data_root / "portfolio" / "portfolio.json"
+        if portfolio_file.exists():
+            try:
+                with open(portfolio_file, "r", encoding="utf-8") as pf:
+                    portfolio_data = json.load(pf)
+                for asset, info in portfolio_data.get("balances", {}).items():
+                    try:
+                        portfolio_balances[asset.upper()] = float(info.get("total", 0))
+                    except (ValueError, TypeError):
+                        pass
+            except Exception as e:
+                log.warning("Kunde inte läsa portföljsaldon för sammanfattning: %s", e)
+
+        # Build holdings table rows
+        holdings_rows = []
+        for currency in self.cfg.currencies:
+            currency_upper = currency.upper()
+            holdings = portfolio_balances.get(currency_upper, 0.0)
+            # Latest close price from history data
+            usdc_value = 0.0
+            df = dfs.get(currency)
+            if df is not None and not df.empty:
+                try:
+                    latest_price = float(df["Close"].iloc[-1])
+                    usdc_value = holdings * latest_price
+                except (ValueError, TypeError, IndexError):
+                    pass
+            signal = self._read_ta_signal(currency)
+            holdings_rows.append((currency_upper, holdings, usdc_value, signal))
+
+        # Add USDC row
+        usdc_holdings = portfolio_balances.get("USDC", 0.0)
+        holdings_rows.append(("USDC", usdc_holdings, usdc_holdings, "–"))
+
+        # Build latest-3-trades table
+        sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
+        recent_trades = sorted_trades[:3]
+
+        trades_rows = []
+        for trade in recent_trades:
+            trade_time_ms = trade.get("time")
+            dt_str = "–"
+            if trade_time_ms:
+                dt = datetime.fromtimestamp(trade_time_ms / 1000, tz=timezone.utc)
+                dt_str = dt.strftime("%Y-%m-%d %H:%M")
+
+            symbol = str(trade.get("symbol", "–")).upper()
+            # Derive currency name by matching against configured currencies
+            currency_name = symbol
+            for cur in self.cfg.currencies:
+                if symbol.startswith(cur.upper()):
+                    currency_name = cur.upper()
+                    break
+
+            try:
+                amount = float(trade.get("quoteQty", 0))
+                amount_str = f"{amount:,.2f} USDC"
+            except (ValueError, TypeError):
+                amount_str = str(trade.get("quoteQty", "–"))
+
+            is_buyer = trade.get("isBuyer", False)
+            trade_type = "KÖP" if is_buyer else "SÄLJ"
+
+            pct_change = "–"
+            if not is_buyer:
+                # Find the most recent BUY for this currency before this SELL
+                preceding_buys = [
+                    t for t in trades
+                    if str(t.get("symbol", "")).upper().startswith(currency_name)
+                    and t.get("isBuyer", False)
+                    and (t.get("time") or 0) < (trade_time_ms or 0)
+                ]
+                if preceding_buys:
+                    preceding_buys.sort(key=lambda t: t.get("time") or 0, reverse=True)
+                    last_buy = preceding_buys[0]
+                    try:
+                        buy_price = float(last_buy.get("price", 0))
+                        sell_price = float(trade.get("price", 0))
+                        if buy_price > 0:
+                            pct = (sell_price - buy_price) / buy_price * 100
+                            sign = "+" if pct >= 0 else ""
+                            pct_change = f"{sign}{pct:.2f}%"
+                    except (ValueError, TypeError):
+                        pass
+
+            trades_rows.append((dt_str, currency_name, amount_str, trade_type, pct_change))
+
+        # Build HTML
+        def _signal_td(signal: str) -> str:
+            css = ""
+            if signal == "KÖP":
+                css = ' class="vh-sum-buy"'
+            elif signal == "SÄLJ":
+                css = ' class="vh-sum-sell"'
+            return f"<td{css}>{signal}</td>"
+
+        def _pct_td(pct: str) -> str:
+            if pct == "–":
+                return f"<td>{pct}</td>"
+            css = ' class="vh-sum-pos"' if pct.startswith("+") else ' class="vh-sum-neg"'
+            return f"<td{css}>{pct}</td>"
+
+        holdings_tbody = ""
+        for (cur, holdings, usdc_value, signal) in holdings_rows:
+            holdings_tbody += (
+                "<tr>"
+                f"<td>{cur}</td>"
+                f"<td>{holdings:.6f}</td>"
+                f"<td>{usdc_value:,.2f}</td>"
+                f"{_signal_td(signal)}"
+                "</tr>\n"
+            )
+
+        trades_tbody = ""
+        for (dt_str, cur, amount_str, trade_type, pct_change) in trades_rows:
+            type_css = ' class="vh-sum-buy"' if trade_type == "KÖP" else ' class="vh-sum-sell"'
+            trades_tbody += (
+                "<tr>"
+                f"<td>{dt_str}</td>"
+                f"<td>{cur}</td>"
+                f"<td>{amount_str}</td>"
+                f"<td{type_css}>{trade_type}</td>"
+                f"{_pct_td(pct_change)}"
+                "</tr>\n"
+            )
+
+        if not trades_rows:
+            trades_tbody = '<tr><td colspan="5" style="text-align:center;color:#6c7086">Inga trades</td></tr>\n'
+
+        log.info("Sammanfattningsfliken byggd")
+        return (
+            '<div id="chart-Sammanfattning" style="padding:20px 32px">\n'
+            '<h2 class="vh-sum-h2">Portföljöversikt</h2>\n'
+            '<table class="vh-sum-table">\n'
+            "<thead><tr>"
+            "<th>Valuta</th><th>Innehav</th><th>Värde (USDC)</th><th>Senaste TA-signal</th>"
+            "</tr></thead>\n"
+            f"<tbody>\n{holdings_tbody}</tbody>\n"
+            "</table>\n"
+            '<h2 class="vh-sum-h2" style="margin-top:32px">Senaste trades</h2>\n'
+            '<table class="vh-sum-table">\n'
+            "<thead><tr>"
+            "<th>Datum</th><th>Valuta</th><th>Belopp</th><th>Typ</th><th>Förändring (SÄLJ)</th>"
+            "</tr></thead>\n"
+            f"<tbody>\n{trades_tbody}</tbody>\n"
+            "</table>\n"
+            "</div>"
+        )
+
     def generate_chart(self, currency: str, trades: List[Dict[str, Any]]) -> Optional[str]:
         """
         Generera HTML-div för angiven valuta.
@@ -720,13 +941,24 @@ class VisualizeHistory:
         """Bygg kombinerat HTML-dokument med flikar för valutaval."""
         created_at = datetime.now(tz=ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d %H:%M")
 
-        # Separera valutaflikar från portföljfliken
-        currency_keys = [c for c in charts if c != "Performance"]
+        # Separera valutaflikar från specialflikarna
+        _special = {"Performance", "Sammanfattning"}
+        currency_keys = [c for c in charts if c not in _special]
         has_portfolio = "Performance" in charts
-        all_keys = currency_keys + (["Performance"] if has_portfolio else [])
+        has_summary = "Sammanfattning" in charts
+        all_keys = (
+            currency_keys
+            + (["Performance"] if has_portfolio else [])
+            + (["Sammanfattning"] if has_summary else [])
+        )
 
         def _tab_button(c: str, active: bool) -> str:
-            extra_class = " vh-tab-portfolio" if c == "Performance" else ""
+            if c == "Performance":
+                extra_class = " vh-tab-portfolio"
+            elif c == "Sammanfattning":
+                extra_class = " vh-tab-summary"
+            else:
+                extra_class = ""
             active_class = " vh-tab-active" if active else ""
             return (
                 '<button class="vh-tab{extra}{active}" id="tab-{c}" '
@@ -736,8 +968,8 @@ class VisualizeHistory:
             )
 
         tab_parts = [_tab_button(c, i == 0) for i, c in enumerate(all_keys)]
-        # Lägg in en separator före portföljfliken om det finns valutaflikar
-        if has_portfolio and currency_keys:
+        # Lägg in en separator före specialflikarna om det finns valutaflikar
+        if (has_portfolio or has_summary) and currency_keys:
             tab_parts.insert(len(currency_keys), '<span class="vh-tab-sep"></span>')
         tabs_html = "\n".join(tab_parts)
 
@@ -757,6 +989,7 @@ class VisualizeHistory:
             "function _tabClass(x, active) {\n"
             "  var cls = 'vh-tab';\n"
             "  if (x === 'Performance') cls += ' vh-tab-portfolio';\n"
+            "  if (x === 'Sammanfattning') cls += ' vh-tab-summary';\n"
             "  if (active) cls += ' vh-tab-active';\n"
             "  return cls;\n"
             "}\n"
@@ -813,8 +1046,20 @@ class VisualizeHistory:
             ".vh-tab-active{background:#1a1a2e;color:#89dceb;border-bottom:1px solid #1a1a2e}\n"
             ".vh-tab-portfolio{color:#a6e3a1;border-color:#a6e3a1}\n"
             ".vh-tab-portfolio.vh-tab-active{color:#a6e3a1}\n"
+            ".vh-tab-summary{color:#cba6f7;border-color:#cba6f7}\n"
+            ".vh-tab-summary.vh-tab-active{color:#cba6f7}\n"
             ".vh-tab-sep{width:1px;background:#45475a;margin:6px 4px;align-self:stretch}\n"
             ".vh-created-at{margin-left:auto;color:#4a5a80;font-size:11px;padding-bottom:10px;align-self:flex-end;white-space:nowrap}\n"
+            ".vh-sum-h2{color:#cdd6f4;margin-top:16px;font-size:18px}\n"
+            ".vh-sum-table{border-collapse:collapse;min-width:480px;font-size:14px}\n"
+            ".vh-sum-table th{background:#16213e;color:#89b4fa;padding:8px 16px;"
+            "text-align:left;border-bottom:2px solid #45475a;white-space:nowrap}\n"
+            ".vh-sum-table td{padding:7px 16px;border-bottom:1px solid #313244;color:#cdd6f4}\n"
+            ".vh-sum-table tr:hover td{background:#1e1e2e}\n"
+            ".vh-sum-buy{color:#a6e3a1;font-weight:bold}\n"
+            ".vh-sum-sell{color:#f38ba8;font-weight:bold}\n"
+            ".vh-sum-pos{color:#a6e3a1}\n"
+            ".vh-sum-neg{color:#f38ba8}\n"
             "</style>\n"
             "</head>\n"
             "<body>\n"
@@ -879,6 +1124,12 @@ class VisualizeHistory:
         except Exception as e:
             log.error("Oväntat fel vid generering av portföljdiagram: %s", e)
 
+        # Generera sammanfattningsflik
+        try:
+            charts["Sammanfattning"] = self.generate_summary_html(trades, dfs)
+        except Exception as e:
+            log.error("Oväntat fel vid generering av sammanfattning: %s", e)
+
         self._ensure_dir(self.output_dir)
         html_file = self.output_dir / "history_chart.html"
         html_content = self._build_combined_html(charts)
@@ -891,9 +1142,10 @@ class VisualizeHistory:
             log.error("Fel vid sparande av kombinerat diagram: %s", e)
             return False
 
+        _special = {"Performance", "Sammanfattning"}
         log.info(
             "VisualizeHistory klar: %d/%d valutadiagram genererade",
-            len([c for c in charts if c != "Performance"]),
+            len([c for c in charts if c not in _special]),
             len(self.cfg.currencies),
         )
         return True

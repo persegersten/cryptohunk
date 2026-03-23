@@ -792,7 +792,186 @@ class TestVisualizeHistory(unittest.TestCase):
             self.assertAlmostEqual(df["BNB"].iloc[row_idx], current_bnb, places=6,
                                    msg=f"Row {row_idx} must reflect post-buy balance")
 
+    # ------------------------------------------------------------------
+    # _read_ta_signal
+    # ------------------------------------------------------------------
 
+    def _create_ta_csv(self, ta_dir: Path, currency: str, **kwargs) -> None:
+        """Create a minimal TA CSV file for testing."""
+        ta_dir.mkdir(parents=True, exist_ok=True)
+        defaults = {
+            "Open_Time_ms": 1_700_003_600_000,
+            "Close": 41000.0,
+            "RSI_14": 50.0,
+            "EMA_12": 41000.0,
+            "EMA_21": 40500.0,
+            "EMA_26": 40000.0,
+            "EMA_50": 39000.0,
+            "EMA_200": 38000.0,
+            "MACD": 100.0,
+            "MACD_Signal": 80.0,
+            "MACD_Histogram": 20.0,
+        }
+        defaults.update(kwargs)
+        import csv as _csv
+        with open(ta_dir / f"{currency}_ta.csv", "w", newline="", encoding="utf-8") as f:
+            writer = _csv.DictWriter(f, fieldnames=list(defaults.keys()))
+            writer.writeheader()
+            writer.writerow(defaults)
+
+    def test_read_ta_signal_missing_file_returns_dash(self):
+        viz = VisualizeHistory(self.cfg)
+        result = viz._read_ta_signal("BTC")
+        self.assertEqual(result, "–")
+
+    def test_read_ta_signal_returns_buy(self):
+        """When all indicators point bullish, signal should be KÖP."""
+        ta_dir = self.data_root / "ta"
+        self._create_ta_csv(
+            ta_dir, "BTC",
+            RSI_14=25.0,       # < 30 → +1
+            EMA_12=42000.0,    # > EMA_26 → +1
+            EMA_26=40000.0,
+            MACD=200.0,        # > MACD_Signal → +1
+            MACD_Signal=100.0,
+            Close=41000.0,     # > EMA_200 → +1
+            EMA_200=38000.0,
+        )
+        viz = VisualizeHistory(self.cfg)
+        self.assertEqual(viz._read_ta_signal("BTC"), "KÖP")
+
+    def test_read_ta_signal_returns_sell(self):
+        """When all indicators point bearish, signal should be SÄLJ."""
+        ta_dir = self.data_root / "ta"
+        self._create_ta_csv(
+            ta_dir, "BTC",
+            RSI_14=75.0,       # > 70 → -1
+            EMA_12=38000.0,    # < EMA_26 → -1
+            EMA_26=40000.0,
+            MACD=-100.0,       # < MACD_Signal → -1
+            MACD_Signal=0.0,
+            Close=37000.0,     # < EMA_200 → -1
+            EMA_200=40000.0,
+        )
+        viz = VisualizeHistory(self.cfg)
+        self.assertEqual(viz._read_ta_signal("BTC"), "SÄLJ")
+
+    def test_read_ta_signal_returns_neutral(self):
+        """Mixed signals resulting in score 0 should produce NEUTRAL.
+
+        RSI_14=25 → +1, EMA_12 < EMA_26 → -1, MACD < MACD_Signal → -1, Close > EMA_200 → +1
+        Total score = 0 → NEUTRAL.
+        """
+        ta_dir = self.data_root / "ta"
+        self._create_ta_csv(
+            ta_dir, "BTC",
+            RSI_14=25.0,       # +1
+            EMA_12=39000.0,    # < EMA_26 → -1
+            EMA_26=40000.0,
+            MACD=-50.0,        # < MACD_Signal → -1
+            MACD_Signal=0.0,
+            Close=41000.0,     # > EMA_200 → +1
+            EMA_200=38000.0,
+        )
+        viz = VisualizeHistory(self.cfg)
+        self.assertEqual(viz._read_ta_signal("BTC"), "NEUTRAL")
+
+    # ------------------------------------------------------------------
+    # generate_summary_html
+    # ------------------------------------------------------------------
+
+    def test_generate_summary_html_returns_div_with_tables(self):
+        """generate_summary_html should return a div containing two tables."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        _create_portfolio_json(self.data_root, {"BTC": 0.5, "USDC": 100.0})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html([], dfs)
+        self.assertIn('id="chart-Sammanfattning"', html)
+        self.assertIn("Portföljöversikt", html)
+        self.assertIn("Senaste trades", html)
+        self.assertIn("vh-sum-table", html)
+        self.assertIn("BTC", html)
+        self.assertIn("USDC", html)
+
+    def test_generate_summary_html_shows_holdings(self):
+        """Holdings from portfolio.json should appear in the summary table."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        _create_portfolio_json(self.data_root, {"BTC": 1.23456, "USDC": 200.0})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html([], dfs)
+        self.assertIn("1.234560", html)
+        self.assertIn("200.000000", html)
+
+    def test_generate_summary_html_shows_ta_signal(self):
+        """TA signal read from ta/<currency>_ta.csv should appear in holdings table."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        ta_dir = self.data_root / "ta"
+        self._create_ta_csv(ta_dir, "BTC",
+                            RSI_14=20.0, EMA_12=42000.0, EMA_26=40000.0,
+                            MACD=100.0, MACD_Signal=50.0,
+                            Close=41000.0, EMA_200=38000.0)
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html([], dfs)
+        self.assertIn("KÖP", html)
+
+    def test_generate_summary_html_shows_latest_trades(self):
+        """The three most recent trades should appear in the summary trades table."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.02",
+             "price": "41000", "quoteQty": "820.0", "time": base_ms + 7_200_000},
+            # Oldest trade – should NOT appear (only 3 shown)
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.005",
+             "price": "39000", "quoteQty": "195.0", "time": base_ms - 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # The three most recent trades should appear
+        self.assertIn("420.00 USDC", html)
+        self.assertIn("400.00 USDC", html)
+        self.assertIn("820.00 USDC", html)
+        # The oldest trade's amount should NOT appear
+        self.assertNotIn("195.00 USDC", html)
+
+    def test_generate_summary_html_sell_shows_pct_change(self):
+        """A SELL trade should display percentage change vs. the preceding BUY."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # sell at 42000 vs buy at 40000 → +5.00%
+        self.assertIn("+5.00%", html)
+
+    def test_run_includes_summary_tab(self):
+        """run() should always include the Sammanfattning tab in the generated HTML."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        success = viz.run()
+        self.assertTrue(success)
+        content = (self.data_root / "visualize" / "history_chart.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="tab-Sammanfattning"', content)
+        self.assertIn("vh-tab-summary", content)
+        self.assertIn('id="chart-Sammanfattning"', content)
+        self.assertIn("Portföljöversikt", content)
+        self.assertIn("Senaste trades", content)
 
 
 if __name__ == "__main__":
