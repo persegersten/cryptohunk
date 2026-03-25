@@ -921,7 +921,7 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("KÖP", html)
 
     def test_generate_summary_html_shows_latest_trades(self):
-        """The three most recent trades should appear in the summary trades table."""
+        """The ten most recent trades should appear in the summary trades table."""
         base_ms = 1_700_000_000_000
         trades = [
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
@@ -930,17 +930,24 @@ class TestVisualizeHistory(unittest.TestCase):
              "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.02",
              "price": "41000", "quoteQty": "820.0", "time": base_ms + 7_200_000},
-            # Oldest trade – should NOT appear (only 3 shown)
+            # 11th oldest trade – should NOT appear (only 10 shown)
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.005",
              "price": "39000", "quoteQty": "195.0", "time": base_ms - 3_600_000},
         ]
+        # Add 7 more trades so the oldest (195.00 USDC) falls outside the 10 shown
+        for i in range(7):
+            trades.append({
+                "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+                "price": "43000", "quoteQty": f"{500 + i * 10}.0",
+                "time": base_ms + (8 + i) * 3_600_000,
+            })
         viz = VisualizeHistory(self.cfg)
         html = viz.generate_summary_html(trades, {})
-        # The three most recent trades should appear
+        # The most recent 10 trades should appear
         self.assertIn("420.00 USDC", html)
         self.assertIn("400.00 USDC", html)
         self.assertIn("820.00 USDC", html)
-        # The oldest trade's amount should NOT appear
+        # The 11th oldest trade's amount should NOT appear
         self.assertNotIn("195.00 USDC", html)
 
     def test_generate_summary_html_sell_shows_pct_change(self):
@@ -958,24 +965,42 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("+5.00%", html)
 
     def test_generate_summary_html_buy_shows_pct_change_vs_latest_price(self):
-        """A BUY trade should display percentage change from buy price to latest close price."""
+        """Only the most recent BUY trade should show % change; earlier BUYs show dash."""
         hist_dir = self.data_root / "history"
         # Latest close price = 40000 + 9*10 = 40090 (index -1 of n=10 prices)
         _create_history_csv(hist_dir, "BTC", n=10)
         base_ms = 1_700_000_000_000
         trades = [
+            # Older BUY – should NOT show % change
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
-             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+             "price": "38000", "quoteQty": "380.0", "time": base_ms},
+            # Most recent BUY – SHOULD show % change
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         html = viz.generate_summary_html(trades, dfs)
         # latest close = 40090, buy price = 40000 → +0.23%
-        import math
         expected_pct = (40090 - 40000) / 40000 * 100
         sign = "+" if expected_pct >= 0 else ""
         expected_str = f"{sign}{expected_pct:.2f}%"
         self.assertIn(expected_str, html)
+        # Older BUY at 38000 should NOT produce a % change value
+        older_pct = (40090 - 38000) / 38000 * 100
+        older_str = f"+{older_pct:.2f}%"
+        self.assertNotIn(older_str, html)
+
+    def test_generate_summary_html_shows_trade_price(self):
+        """Trade execution price should appear in the trades table."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "41234.56", "quoteQty": "412.35", "time": base_ms},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        self.assertIn("41,234.56", html)
 
     def test_run_includes_summary_tab(self):
         """run() should always include the Overview tab in the generated HTML."""

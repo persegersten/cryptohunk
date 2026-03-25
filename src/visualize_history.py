@@ -650,12 +650,18 @@ class VisualizeHistory:
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
         holdings_rows.append(("USDC", usdc_holdings, usdc_holdings, "–"))
 
-        # Build latest-3-trades table
+        # Build latest-10-trades table
         sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
-        recent_trades = sorted_trades[:3]
+        recent_trades = sorted_trades[:10]
+
+        # Identify the index of the most recent BUY in the displayed list
+        most_recent_buy_idx = next(
+            (i for i, t in enumerate(recent_trades) if t.get("isBuyer", False)),
+            None,
+        )
 
         trades_rows = []
-        for trade in recent_trades:
+        for row_idx, trade in enumerate(recent_trades):
             trade_time_ms = trade.get("time")
             dt_str = "–"
             if trade_time_ms:
@@ -675,6 +681,12 @@ class VisualizeHistory:
                 amount_str = f"{amount:,.2f} USDC"
             except (ValueError, TypeError):
                 amount_str = str(trade.get("quoteQty", "–"))
+
+            try:
+                price_val = float(trade.get("price", 0))
+                price_str = f"{price_val:,.2f}"
+            except (ValueError, TypeError):
+                price_str = str(trade.get("price", "–"))
 
             is_buyer = trade.get("isBuyer", False)
             trade_type = "KÖP" if is_buyer else "SÄLJ"
@@ -700,8 +712,8 @@ class VisualizeHistory:
                             pct_change = f"{sign}{pct:.2f}%"
                     except (ValueError, TypeError):
                         pass
-            else:
-                # KÖP: visa % förändring från köpkurs mot senaste kurs
+            elif row_idx == most_recent_buy_idx:
+                # KÖP: visa % förändring från köpkurs mot senaste kurs – endast för senaste KÖP
                 cur_df = dfs.get(currency_name)
                 if cur_df is not None and not cur_df.empty:
                     try:
@@ -714,7 +726,7 @@ class VisualizeHistory:
                     except (ValueError, TypeError, IndexError):
                         pass
 
-            trades_rows.append((dt_str, currency_name, amount_str, trade_type, pct_change))
+            trades_rows.append((dt_str, currency_name, amount_str, price_str, trade_type, pct_change))
 
         # Build HTML
         def _signal_td(signal: str) -> str:
@@ -743,20 +755,21 @@ class VisualizeHistory:
             )
 
         trades_tbody = ""
-        for (dt_str, cur, amount_str, trade_type, pct_change) in trades_rows:
+        for (dt_str, cur, amount_str, price_str, trade_type, pct_change) in trades_rows:
             type_css = ' class="vh-sum-buy"' if trade_type == "KÖP" else ' class="vh-sum-sell"'
             trades_tbody += (
                 "<tr>"
                 f"<td>{dt_str}</td>"
                 f"<td>{cur}</td>"
                 f"<td>{amount_str}</td>"
+                f"<td>{price_str}</td>"
                 f"<td{type_css}>{trade_type}</td>"
                 f"{_pct_td(pct_change)}"
                 "</tr>\n"
             )
 
         if not trades_rows:
-            trades_tbody = '<tr><td colspan="5" style="text-align:center;color:#6c7086">Inga trades</td></tr>\n'
+            trades_tbody = '<tr><td colspan="6" style="text-align:center;color:#6c7086">Inga trades</td></tr>\n'
 
         log.info("Overview-fliken byggd")
         return (
@@ -771,7 +784,7 @@ class VisualizeHistory:
             '<h2 class="vh-sum-h2" style="margin-top:32px">Senaste trades</h2>\n'
             '<table class="vh-sum-table">\n'
             "<thead><tr>"
-            "<th>Datum</th><th>Valuta</th><th>Belopp</th><th>Typ</th><th>Förändring</th>"
+            "<th>Datum</th><th>Valuta</th><th>Belopp</th><th>Kurs</th><th>Typ</th><th>Förändring</th>"
             "</tr></thead>\n"
             f"<tbody>\n{trades_tbody}</tbody>\n"
             "</table>\n"
