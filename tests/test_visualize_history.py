@@ -300,6 +300,146 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNone(result)
 
     # ------------------------------------------------------------------
+    # _read_backtest
+    # ------------------------------------------------------------------
+
+    def _create_backtest_csv(
+        self,
+        backtest_dir: Path,
+        currency: str,
+        records: list,
+    ) -> None:
+        """Create a minimal backtesting CSV file for testing."""
+        import csv
+        backtest_dir.mkdir(parents=True, exist_ok=True)
+        fieldnames = ["timestamp_ms", "currency", "ta_signal", "signal"]
+        with open(backtest_dir / f"{currency}_backtesting.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(records)
+
+    def test_read_backtest_missing_file_returns_none(self):
+        """_read_backtest should return None when the CSV file does not exist."""
+        viz = VisualizeHistory(self.cfg)
+        result = viz._read_backtest("BTC")
+        self.assertIsNone(result)
+
+    def test_read_backtest_returns_dataframe_with_datetime(self):
+        """_read_backtest should return a DataFrame with a datetime column."""
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms + i * 3_600_000, "currency": "BTC",
+             "ta_signal": 0, "signal": "HOLD"}
+            for i in range(5)
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_backtest("BTC")
+        self.assertIsNotNone(df)
+        self.assertIn("datetime", df.columns)
+        self.assertIn("signal", df.columns)
+        self.assertEqual(len(df), 5)
+
+    def test_read_backtest_sorted_by_datetime(self):
+        """_read_backtest should return rows sorted by datetime."""
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms + 2 * 3_600_000, "currency": "BTC", "ta_signal": 1, "signal": "BUY"},
+            {"timestamp_ms": base_ms + 0 * 3_600_000, "currency": "BTC", "ta_signal": 0, "signal": "HOLD"},
+            {"timestamp_ms": base_ms + 1 * 3_600_000, "currency": "BTC", "ta_signal": -1, "signal": "SELL"},
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_backtest("BTC")
+        self.assertIsNotNone(df)
+        datetimes = list(df["datetime"])
+        self.assertEqual(datetimes, sorted(datetimes))
+
+    def test_read_backtest_empty_timestamp_ms_skipped(self):
+        """Rows with non-numeric timestamp_ms should be dropped gracefully."""
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms, "currency": "BTC", "ta_signal": 0, "signal": "HOLD"},
+            {"timestamp_ms": "", "currency": "BTC", "ta_signal": 0, "signal": "HOLD"},
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        df = viz._read_backtest("BTC")
+        self.assertIsNotNone(df)
+        self.assertEqual(len(df), 1)
+
+    # ------------------------------------------------------------------
+    # generate_chart with backtest background
+    # ------------------------------------------------------------------
+
+    def test_generate_chart_includes_backtest_vrect_for_buy(self):
+        """generate_chart should add a green vrect shape when backtest has BUY signals."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms + i * 3_600_000, "currency": "BTC",
+             "ta_signal": 1, "signal": "BUY"}
+            for i in range(10)
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        # Green fill color for BUY should appear in the shapes data
+        self.assertIn("rgba(0, 80, 30, 0.20)", html_content)
+
+    def test_generate_chart_includes_backtest_vrect_for_sell(self):
+        """generate_chart should add a red vrect shape when backtest has SELL signals."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms + i * 3_600_000, "currency": "BTC",
+             "ta_signal": -1, "signal": "SELL"}
+            for i in range(10)
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        # Red fill color for SELL should appear in the shapes data
+        self.assertIn("rgba(80, 0, 0, 0.20)", html_content)
+
+    def test_generate_chart_no_vrect_for_hold(self):
+        """generate_chart should NOT add colored background for HOLD signals."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        backtest_dir = self.data_root / "output" / "backtesting"
+        base_ms = 1_700_000_000_000
+        records = [
+            {"timestamp_ms": base_ms + i * 3_600_000, "currency": "BTC",
+             "ta_signal": 0, "signal": "HOLD"}
+            for i in range(10)
+        ]
+        self._create_backtest_csv(backtest_dir, "BTC", records)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
+        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
+
+    def test_generate_chart_no_backtest_no_vrect(self):
+        """generate_chart should not crash and produce no colored vrects when backtest file is absent."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=50)
+        viz = VisualizeHistory(self.cfg)
+        html_content = viz.generate_chart("BTC", [])
+        self.assertIsNotNone(html_content)
+        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
+        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
+
+    # ------------------------------------------------------------------
     # _build_portfolio_performance
     # ------------------------------------------------------------------
 

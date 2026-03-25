@@ -46,6 +46,33 @@ class VisualizeHistory:
     def _ensure_dir(self, path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
 
+    def _read_backtest(self, currency: str) -> Optional[pd.DataFrame]:
+        """Läs backtestresultat för angiven valuta.
+
+        Returnerar DataFrame med kolumnerna 'datetime' och 'signal' (BUY/SELL/HOLD),
+        sorterade på datetime. Returnerar None om filen saknas eller inte kan läsas.
+        """
+        backtest_file = self.data_root / "output" / "backtesting" / f"{currency}_backtesting.csv"
+        if not backtest_file.exists():
+            log.info("Backtestfil saknas för %s: %s", currency, backtest_file)
+            return None
+        try:
+            df = pd.read_csv(backtest_file)
+            if "timestamp_ms" not in df.columns or "signal" not in df.columns:
+                log.warning("Backtestfil för %s saknar förväntade kolumner", currency)
+                return None
+            df["timestamp_ms"] = pd.to_numeric(df["timestamp_ms"], errors="coerce")
+            df = df.dropna(subset=["timestamp_ms"])
+            if df.empty:
+                return None
+            df["datetime"] = pd.to_datetime(df["timestamp_ms"], unit="ms", utc=True)
+            df = df.sort_values("datetime").reset_index(drop=True)
+            log.info("Läste backtestdata för %s: %d rader", currency, len(df))
+            return df
+        except Exception as e:
+            log.error("Fel vid läsning av backtestdata för %s: %s", currency, e)
+            return None
+
     def _read_history(self, currency: str) -> Optional[pd.DataFrame]:
         """Läs kurshistorik för angiven valuta."""
         csv_file = self.history_root / f"{currency}_history.csv"
@@ -811,6 +838,7 @@ class VisualizeHistory:
             return None
 
         currency_trades = self._filter_trades_for_currency(trades, currency)
+        backtest_df = self._read_backtest(currency)
 
         # Skapa subplot med candlestick och volym
         fig = make_subplots(
@@ -924,6 +952,36 @@ class VisualizeHistory:
                         hovertemplate="%{text}<extra></extra>",
                     ),
                     row=1, col=1,
+                )
+
+        # Bakgrundsfärger baserat på backtestsignaler (BUY=grön, SELL=röd)
+        if backtest_df is not None and not backtest_df.empty:
+            BUY_COLOR = "rgba(0, 80, 30, 0.20)"
+            SELL_COLOR = "rgba(80, 0, 0, 0.20)"
+            chart_end = df["datetime"].max()
+            current_signal: Optional[str] = None
+            seg_start = None
+            for _, row_bt in backtest_df.iterrows():
+                sig = row_bt["signal"]
+                dt = row_bt["datetime"]
+                if sig != current_signal:
+                    if current_signal in ("BUY", "SELL") and seg_start is not None:
+                        color = BUY_COLOR if current_signal == "BUY" else SELL_COLOR
+                        fig.add_vrect(
+                            x0=seg_start, x1=dt,
+                            fillcolor=color, layer="below", line_width=0,
+                            row="all", col=1,
+                        )
+                    current_signal = sig
+                    seg_start = dt
+            # Avsluta sista segmentet
+            if current_signal in ("BUY", "SELL") and seg_start is not None:
+                seg_end = min(backtest_df["datetime"].max(), chart_end)
+                fig.add_vrect(
+                    x0=seg_start, x1=seg_end,
+                    fillcolor=(BUY_COLOR if current_signal == "BUY" else SELL_COLOR),
+                    layer="below", line_width=0,
+                    row="all", col=1,
                 )
 
         fig.update_layout(
