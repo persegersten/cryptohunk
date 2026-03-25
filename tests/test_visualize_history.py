@@ -906,6 +906,19 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("1.234560", html)
         self.assertIn("200.000000", html)
 
+    def test_generate_summary_html_shows_latest_price_in_holdings(self):
+        """Latest close price should appear in the portfolio overview table."""
+        hist_dir = self.data_root / "history"
+        # n=10 → prices[9] = 40000 + 9*10 = 40090
+        _create_history_csv(hist_dir, "BTC", n=10)
+        _create_portfolio_json(self.data_root, {"BTC": 1.0})
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html([], dfs)
+        # latest close price formatted with thousands separator
+        self.assertIn("Senaste kurs", html)
+        self.assertIn("40,090.00", html)
+
     def test_generate_summary_html_shows_ta_signal(self):
         """TA signal read from ta/<currency>_ta.csv should appear in holdings table."""
         hist_dir = self.data_root / "history"

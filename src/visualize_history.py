@@ -635,6 +635,7 @@ class VisualizeHistory:
             currency_upper = currency.upper()
             holdings = portfolio_balances.get(currency_upper, 0.0)
             # Latest close price from history data
+            latest_price = 0.0
             usdc_value = 0.0
             df = dfs.get(currency)
             if df is not None and not df.empty:
@@ -644,11 +645,11 @@ class VisualizeHistory:
                 except (ValueError, TypeError, IndexError):
                     pass
             signal = self._read_ta_signal(currency)
-            holdings_rows.append((currency_upper, holdings, usdc_value, signal))
+            holdings_rows.append((currency_upper, holdings, latest_price, usdc_value, signal))
 
         # Add USDC row
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
-        holdings_rows.append(("USDC", usdc_holdings, usdc_holdings, "–"))
+        holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
 
         # Build latest-10-trades table
         sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
@@ -744,11 +745,13 @@ class VisualizeHistory:
             return f"<td{css}>{pct}</td>"
 
         holdings_tbody = ""
-        for (cur, holdings, usdc_value, signal) in holdings_rows:
+        for (cur, holdings, latest_price, usdc_value, signal) in holdings_rows:
+            price_col = f"{latest_price:,.2f}" if latest_price else "–"
             holdings_tbody += (
                 "<tr>"
                 f"<td>{cur}</td>"
                 f"<td>{holdings:.6f}</td>"
+                f"<td>{price_col}</td>"
                 f"<td>{usdc_value:,.2f}</td>"
                 f"{_signal_td(signal)}"
                 "</tr>\n"
@@ -777,7 +780,7 @@ class VisualizeHistory:
             '<h2 class="vh-sum-h2">Portföljöversikt</h2>\n'
             '<table class="vh-sum-table">\n'
             "<thead><tr>"
-            "<th>Valuta</th><th>Innehav</th><th>Värde (USDC)</th><th>Senaste TA-signal</th>"
+            "<th>Valuta</th><th>Innehav</th><th>Senaste kurs</th><th>Värde (USDC)</th><th>Senaste TA-signal</th>"
             "</tr></thead>\n"
             f"<tbody>\n{holdings_tbody}</tbody>\n"
             "</table>\n"
