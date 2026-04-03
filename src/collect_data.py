@@ -152,10 +152,22 @@ class CollectData:
             "Close_Time_ms", "Quote_Asset_Volume", "Number_of_Trades",
             "Taker_Buy_Base_Asset_Volume", "Taker_Buy_Quote_Asset_Volume"
         ]
+        # Filter out incomplete (in-progress) candles whose close time is in the
+        # future.  The Binance klines endpoint always appends the current,
+        # unfinished candle as the last element.  Using it for TA signal
+        # evaluation produces unreliable signals because the Close price keeps
+        # changing until the candle actually closes.
+        now_ms = int(time.time() * 1000)
+        complete_klines = [k for k in klines_data if int(k[6]) <= now_ms]
+        if len(complete_klines) < len(klines_data):
+            log.info(
+                "Filtrerade bort %d ofullständiga klines (Close_Time_ms > nu)",
+                len(klines_data) - len(complete_klines),
+            )
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(headers)
-            for k in klines_data:
+            for k in complete_klines:
                 writer.writerow([
                     int(k[0]), float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5]),
                     int(k[6]), float(k[7]), int(k[8]), float(k[9]), float(k[10])
