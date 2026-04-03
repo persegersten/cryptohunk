@@ -171,7 +171,7 @@ class RebalancePortfolio:
         - MACD(t) > MACD_Signal(t)        -- momentum confirmation
         - Close(t) > EMA_21(t)            -- price above short EMA
         - RSI_14(t-1) <= 50 AND RSI_14(t) > 50  -- RSI crosses up over 50
-        - min(RSI_14(t-8)...RSI_14(t-1)) < 45   -- pullback/reset (excl. entry candle)
+        - min(RSI_14(t-12)...RSI_14(t-1)) < 50  -- pullback/reset (excl. entry candle)
         - Optional: EMA_50(t) > EMA_200(t) if cfg.ta2_use_ema50_filter
 
         Exit (SELL): MACD(t) < MACD_Signal(t)
@@ -179,7 +179,7 @@ class RebalancePortfolio:
         Returns:
             1 (BUY), -1 (SELL), or 0 (HOLD)
         """
-        LOOKBACK = 8
+        LOOKBACK = 12
 
         if len(ta_df) < LOOKBACK + 1:
             log.debug("TA2: not enough rows for lookback (%d < %d)", len(ta_df), LOOKBACK + 1)
@@ -229,10 +229,10 @@ class RebalancePortfolio:
         if rsi_prev > 50 or rsi_t <= 50:
             return 0
 
-        # 5. Pullback/reset: min(RSI_14(t-8)...RSI_14(t-1)) < 45
-        #    Indices: t-8 to t-1 = ta_df["RSI_14"].iloc[-(LOOKBACK+1):-1]
+        # 5. Pullback/reset: min(RSI_14(t-12)...RSI_14(t-1)) < 50
+        #    Indices: t-12 to t-1 = ta_df["RSI_14"].iloc[-(LOOKBACK+1):-1]
         rsi_lookback = ta_df["RSI_14"].iloc[-(LOOKBACK + 1):-1]
-        if rsi_lookback.isna().any() or rsi_lookback.min() >= 45:
+        if rsi_lookback.isna().any() or rsi_lookback.min() >= 50:
             return 0
 
         # 6. Optional EMA50 trend-strength filter

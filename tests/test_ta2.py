@@ -39,11 +39,16 @@ def _make_cfg(tmp_dir, ta2_use_ema50_filter=False):
         currency_history_period="1h",
         currency_history_nof_elements=300,
         trade_threshold=100.0,
-        take_profit_percentage=10.0,
-        stop_loss_percentage=6.0,
+        take_profit_percentage=3.0,
+        stop_loss_percentage=3.0,
         allowed_quote_assets=["USDT"],
-        ta2_use_ema50_filter=ta2_use_ema50_filter,
+        ftp_host=None,
+        ftp_dir=None,
+        ftp_username=None,
+        ftp_password=None,
+        ftp_html_regexp=None,
         raw_env={},
+        ta2_use_ema50_filter=ta2_use_ema50_filter,
     )
 
 
@@ -56,7 +61,7 @@ def _build_ta_df(
     macd=10.0,
     macd_signal=5.0,
     # RSI series: control t-1 and t, and the lookback window
-    rsi_lookback_min=40.0,   # min RSI in t-8..t-1 (should be < 45 for entry)
+    rsi_lookback_min=40.0,   # min RSI in t-12..t-1 (should be < 50 for entry)
     rsi_t_minus_1=48.0,      # RSI at t-1 (should be <= 50 for cross)
     rsi_t=52.0,              # RSI at t (should be > 50 for cross)
 ):
@@ -64,8 +69,8 @@ def _build_ta_df(
     rows = n_rows
     # Build RSI series: fill lookback window with rsi_lookback_min, then t-1, then t
     rsi_values = [55.0] * rows  # default neutral
-    # Set the 8 candles before t-1 (indices rows-10 to rows-2) to rsi_lookback_min
-    for i in range(rows - 9, rows - 1):  # t-8 to t-1 are indices rows-9 to rows-2 (0-based)
+    # Set the 12 candles before t-1 (indices rows-14 to rows-2) to rsi_lookback_min
+    for i in range(rows - 13, rows - 1):  # t-12 to t-1 are indices rows-13 to rows-2 (0-based)
         rsi_values[i] = rsi_lookback_min
     rsi_values[-2] = rsi_t_minus_1  # t-1
     rsi_values[-1] = rsi_t          # t
@@ -161,8 +166,10 @@ class TestTA2SignalEntry(unittest.TestCase):
         self.assertNotEqual(result, 1)
 
     def test_no_buy_when_lookback_reset_missing(self):
-        # Lookback min RSI >= 45 → no pullback reset
-        df = _build_ta_df(rsi_lookback_min=50.0)
+        # Lookback min RSI >= 50 → no pullback reset
+        # rsi_t_minus_1=50.0 satisfies the RSI cross (<=50) but with all lookback values >=50
+        # the pullback reset condition (min < 50) is not met
+        df = _build_ta_df(rsi_lookback_min=55.0, rsi_t_minus_1=50.0)
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertNotEqual(result, 1)
 
@@ -179,7 +186,7 @@ class TestTA2SignalEntry(unittest.TestCase):
         self.assertEqual(result, 1)  # BUY — entry candle not in lookback
 
     def test_not_enough_rows_returns_hold(self):
-        df = _build_ta_df(n_rows=5)  # < 9 rows needed
+        df = _build_ta_df(n_rows=8)  # < 13 rows needed
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, 0)  # HOLD
 
@@ -271,7 +278,7 @@ class TestTA2OverrideRules(unittest.TestCase):
             currency="BTC",
             ta_score=0,  # TA2 HOLD
             current_value_usdc=50.0,   # < 100 threshold
-            percentage_change=15.0,    # > 10% profit
+            percentage_change=5.0,     # > 3% profit
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 1)
@@ -282,7 +289,7 @@ class TestTA2OverrideRules(unittest.TestCase):
             currency="BTC",
             ta_score=1,   # TA2 BUY
             current_value_usdc=500.0,  # >= 100 threshold
-            percentage_change=-7.0,    # > 6% loss
+            percentage_change=-4.0,    # > 3% loss
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 2)
@@ -293,7 +300,7 @@ class TestTA2OverrideRules(unittest.TestCase):
             currency="BTC",
             ta_score=-1,  # TA2 SELL
             current_value_usdc=50.0,   # < 100 threshold
-            percentage_change=5.0,     # < 10% profit
+            percentage_change=2.0,     # < 3% profit
         )
         self.assertEqual(signal, "HOLD")
         self.assertEqual(priority, 3)
