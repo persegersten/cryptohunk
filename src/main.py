@@ -133,6 +133,10 @@ def main():
         print("Utför handel (ExecuteTradePlan)...")
         execute_trade_plan_main(cfg)
 
+    if args.backtest:
+        print("Startar historisk simulering (Backtest)...")
+        backtest_main(cfg)
+
     if args.visualize:
         print("Genererar kurshistorikdiagram (VisualizeHistory)...")
         visualize_history_main(cfg)
@@ -140,10 +144,6 @@ def main():
     if args.ftp_upload:
         print("Laddar upp HTML-filer via FTP (FtpUpload)...")
         ftp_upload_main(cfg)
-
-    if args.backtest:
-        print("Startar historisk simulering (Backtest)...")
-        backtest_main(cfg)
 
     print("\nKlar.")
 
