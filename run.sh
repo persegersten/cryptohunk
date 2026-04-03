@@ -4,10 +4,10 @@ export CURRENCIES="BNB,ETH,SOL"
 export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 export DATA_AREA_ROOT_DIR="/tmp/cryptohunk_data"
 export CURRENCY_HISTORY_PERIOD="1h"
-export CURRENCY_HISTORY_NOF_ELEMENTS="100"
+export CURRENCY_HISTORY_NOF_ELEMENTS="300"
 export TRADE_THRESHOLD="10"
-export TAKE_PROFIT_PERCENTAGE="6.0"
-export STOP_LOSS_PERCENTAGE="6.0"
+export TAKE_PROFIT_PERCENTAGE="3.0"
+export STOP_LOSS_PERCENTAGE="3.0"
 
 #
 # sedan:
