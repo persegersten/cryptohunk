@@ -352,54 +352,19 @@ class VisualizeHistory:
 
     def _read_ta_signal(self, currency: str) -> str:
         """
-        Läs senaste TA-signal för angiven valuta från ta/<currency>_ta.csv.
+        Läs senaste TA-signal för angiven valuta från backtesting-CSV.
 
-        Beräknar ett poäng baserat på RSI, EMA-korsning, MACD och Close vs EMA_200.
-        Returnerar 'KÖP', 'SÄLJ', 'NEUTRAL' eller '–' om ingen TA-data finns.
+        Returnerar 'KÖP', 'SÄLJ', 'NEUTRAL' eller '–' om ingen data finns.
+        Signalen hämtas från samma backtesting-fil som används för
+        kurshistorikdiagrammet så att Overview-tabben alltid stämmer
+        överens med diagrammets bakgrundsfärg.
         """
-        ta_file = self.data_root / "ta" / f"{currency}_ta.csv"
-        if not ta_file.exists():
+        _SIGNAL_MAP = {"BUY": "KÖP", "SELL": "SÄLJ", "HOLD": "NEUTRAL"}
+        bt_df = self._read_backtest(currency)
+        if bt_df is None or bt_df.empty:
             return "–"
-        try:
-            df = pd.read_csv(ta_file)
-            if df.empty:
-                return "–"
-            row = df.iloc[-1]
-            score = 0
-            try:
-                rsi = float(row["RSI_14"])
-                if rsi < 30:
-                    score += 1
-                elif rsi > 70:
-                    score -= 1
-            except (ValueError, TypeError, KeyError):
-                pass
-            try:
-                ema12 = float(row["EMA_12"])
-                ema26 = float(row["EMA_26"])
-                score += 1 if ema12 > ema26 else -1
-            except (ValueError, TypeError, KeyError):
-                pass
-            try:
-                macd = float(row["MACD"])
-                macd_sig = float(row["MACD_Signal"])
-                score += 1 if macd > macd_sig else -1
-            except (ValueError, TypeError, KeyError):
-                pass
-            try:
-                close = float(row["Close"])
-                ema200 = float(row["EMA_200"])
-                score += 1 if close > ema200 else -1
-            except (ValueError, TypeError, KeyError):
-                pass
-            if score >= 1:
-                return "KÖP"
-            elif score <= -1:
-                return "SÄLJ"
-            return "NEUTRAL"
-        except Exception as e:
-            log.warning("Kunde inte läsa TA-signal för %s: %s", currency, e)
-            return "–"
+        last_signal = str(bt_df.iloc[-1]["signal"]).strip().upper()
+        return _SIGNAL_MAP.get(last_signal, "–")
 
     def _build_portfolio_performance(
         self,

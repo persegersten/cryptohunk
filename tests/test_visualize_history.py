@@ -936,28 +936,15 @@ class TestVisualizeHistory(unittest.TestCase):
     # _read_ta_signal
     # ------------------------------------------------------------------
 
-    def _create_ta_csv(self, ta_dir: Path, currency: str, **kwargs) -> None:
-        """Create a minimal TA CSV file for testing."""
-        ta_dir.mkdir(parents=True, exist_ok=True)
-        defaults = {
-            "Open_Time_ms": 1_700_003_600_000,
-            "Close": 41000.0,
-            "RSI_14": 50.0,
-            "EMA_12": 41000.0,
-            "EMA_21": 40500.0,
-            "EMA_26": 40000.0,
-            "EMA_50": 39000.0,
-            "EMA_200": 38000.0,
-            "MACD": 100.0,
-            "MACD_Signal": 80.0,
-            "MACD_Histogram": 20.0,
-        }
-        defaults.update(kwargs)
+    def _create_backtesting_csv(self, currency: str, signal: str) -> None:
+        """Create a minimal backtesting CSV file for testing."""
+        bt_dir = self.data_root / "output" / "backtesting"
+        bt_dir.mkdir(parents=True, exist_ok=True)
         import csv as _csv
-        with open(ta_dir / f"{currency}_ta.csv", "w", newline="", encoding="utf-8") as f:
-            writer = _csv.DictWriter(f, fieldnames=list(defaults.keys()))
+        with open(bt_dir / f"{currency}_backtesting.csv", "w", newline="", encoding="utf-8") as f:
+            writer = _csv.DictWriter(f, fieldnames=["timestamp_ms", "currency", "ta_signal", "signal"])
             writer.writeheader()
-            writer.writerow(defaults)
+            writer.writerow({"timestamp_ms": 1_700_003_600_000, "currency": currency, "ta_signal": 0, "signal": signal})
 
     def test_read_ta_signal_missing_file_returns_dash(self):
         viz = VisualizeHistory(self.cfg)
@@ -965,54 +952,20 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertEqual(result, "–")
 
     def test_read_ta_signal_returns_buy(self):
-        """When all indicators point bullish, signal should be KÖP."""
-        ta_dir = self.data_root / "ta"
-        self._create_ta_csv(
-            ta_dir, "BTC",
-            RSI_14=25.0,       # < 30 → +1
-            EMA_12=42000.0,    # > EMA_26 → +1
-            EMA_26=40000.0,
-            MACD=200.0,        # > MACD_Signal → +1
-            MACD_Signal=100.0,
-            Close=41000.0,     # > EMA_200 → +1
-            EMA_200=38000.0,
-        )
+        """When backtesting CSV last signal is BUY, signal should be KÖP."""
+        self._create_backtesting_csv("BTC", "BUY")
         viz = VisualizeHistory(self.cfg)
         self.assertEqual(viz._read_ta_signal("BTC"), "KÖP")
 
     def test_read_ta_signal_returns_sell(self):
-        """When all indicators point bearish, signal should be SÄLJ."""
-        ta_dir = self.data_root / "ta"
-        self._create_ta_csv(
-            ta_dir, "BTC",
-            RSI_14=75.0,       # > 70 → -1
-            EMA_12=38000.0,    # < EMA_26 → -1
-            EMA_26=40000.0,
-            MACD=-100.0,       # < MACD_Signal → -1
-            MACD_Signal=0.0,
-            Close=37000.0,     # < EMA_200 → -1
-            EMA_200=40000.0,
-        )
+        """When backtesting CSV last signal is SELL, signal should be SÄLJ."""
+        self._create_backtesting_csv("BTC", "SELL")
         viz = VisualizeHistory(self.cfg)
         self.assertEqual(viz._read_ta_signal("BTC"), "SÄLJ")
 
     def test_read_ta_signal_returns_neutral(self):
-        """Mixed signals resulting in score 0 should produce NEUTRAL.
-
-        RSI_14=25 → +1, EMA_12 < EMA_26 → -1, MACD < MACD_Signal → -1, Close > EMA_200 → +1
-        Total score = 0 → NEUTRAL.
-        """
-        ta_dir = self.data_root / "ta"
-        self._create_ta_csv(
-            ta_dir, "BTC",
-            RSI_14=25.0,       # +1
-            EMA_12=39000.0,    # < EMA_26 → -1
-            EMA_26=40000.0,
-            MACD=-50.0,        # < MACD_Signal → -1
-            MACD_Signal=0.0,
-            Close=41000.0,     # > EMA_200 → +1
-            EMA_200=38000.0,
-        )
+        """When backtesting CSV last signal is HOLD, signal should be NEUTRAL."""
+        self._create_backtesting_csv("BTC", "HOLD")
         viz = VisualizeHistory(self.cfg)
         self.assertEqual(viz._read_ta_signal("BTC"), "NEUTRAL")
 
@@ -1060,14 +1013,10 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("40,090.00", html)
 
     def test_generate_summary_html_shows_ta_signal(self):
-        """TA signal read from ta/<currency>_ta.csv should appear in holdings table."""
+        """TA signal read from backtesting CSV should appear in holdings table."""
         hist_dir = self.data_root / "history"
         _create_history_csv(hist_dir, "BTC", n=10)
-        ta_dir = self.data_root / "ta"
-        self._create_ta_csv(ta_dir, "BTC",
-                            RSI_14=20.0, EMA_12=42000.0, EMA_26=40000.0,
-                            MACD=100.0, MACD_Signal=50.0,
-                            Close=41000.0, EMA_200=38000.0)
+        self._create_backtesting_csv("BTC", "BUY")
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         html = viz.generate_summary_html([], dfs)
