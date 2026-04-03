@@ -186,7 +186,7 @@ class TestTA2SignalEntry(unittest.TestCase):
         self.assertEqual(result, 1)  # BUY — entry candle not in lookback
 
     def test_not_enough_rows_returns_hold(self):
-        df = _build_ta_df(n_rows=8)  # < 13 rows needed
+        df = _build_ta_df(n_rows=12)  # < 13 rows needed (LOOKBACK + 1)
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, 0)  # HOLD
 
