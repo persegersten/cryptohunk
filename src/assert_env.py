@@ -15,8 +15,8 @@ Miljövariabler som hanteras:
 - CURRENCY_HISTORY_PERIOD (måste sättas)
 - CURRENCY_HISTORY_NOF_ELEMENTS (måste sättas, int)
 - TRADE_THRESHOLD (valfritt, float, default: 10.0)
-- TAKE_PROFIT_PERCENTAGE (valfritt, float, default: 10.0)
-- STOP_LOSS_PERCENTAGE (valfritt, float, default: 6.0)
+- TAKE_PROFIT_PERCENTAGE (valfritt, float, default: 3.0)
+- STOP_LOSS_PERCENTAGE (valfritt, float, default: 3.0)
 - QUOTE_ASSETS (valfritt, ex "USDT,USDC" — vilka quote-valutor vi vill hämta trades för)
 - TA2_USE_EMA50_FILTER (valfritt, true/false, default: false)
 """
@@ -97,12 +97,12 @@ def load_config_from_env() -> Config:
         raise EnvironmentError("TRADE_THRESHOLD måste vara ett tal (float).")
 
     try:
-        take_profit_percentage = float(env.get("TAKE_PROFIT_PERCENTAGE", "10.0"))
+        take_profit_percentage = float(env.get("TAKE_PROFIT_PERCENTAGE", "3.0"))
     except ValueError:
         raise EnvironmentError("TAKE_PROFIT_PERCENTAGE måste vara ett tal (float).")
 
     try:
-        stop_loss_percentage = float(env.get("STOP_LOSS_PERCENTAGE", "6.0"))
+        stop_loss_percentage = float(env.get("STOP_LOSS_PERCENTAGE", "3.0"))
     except ValueError:
         raise EnvironmentError("STOP_LOSS_PERCENTAGE måste vara ett tal (float).")
 
