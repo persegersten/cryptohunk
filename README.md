@@ -28,15 +28,12 @@ export CURRENCY_HISTORY_NOF_ELEMENTS="300"
 # export TRADE_THRESHOLD="10.0"   # optional, default: 10.0
 export DRY_RUN="true"
 
-# Run complete workflow (TA strategy)
+# Run complete workflow
 python3 -m src.main --collect-data
 python3 -m src.main --run-ta
 python3 -m src.main --rebalance-portfolio
 python3 -m src.main --create-trade-plan
 python3 -m src.main --execute-trades
-
-# OR: Run with TA2 strategy (--run-ta and --run-ta2 are mutually exclusive)
-python3 -m src.main --run-ta2 --rebalance-portfolio
 ```
 
 ## Configuration
@@ -67,34 +64,19 @@ Calculates indicators on historical price data:
 
 Two TA strategies are available:
 
-### TA Strategy (default, `--run-ta`)
-**TA Score Calculation:**
-- RSI < 30 or > 70: +1/-1 points
-- EMA crossovers: +1/-1 points
-- MACD signals: +1/-1 points
-- Price vs EMA 200: +1/-1 points
-
-### TA2 Strategy (`--run-ta2`) — Long-Only Trend-Following Pullback
+### TA Strategy (`--run-ta`) — Long-Only Trend-Following Pullback
 **Entry (BUY) — all conditions must be true:**
 - `Close > EMA_200` (trend filter)
 - `MACD > MACD_Signal` (momentum)
 - `Close > EMA_21` (price above short EMA)
 - RSI_14 crosses up over 50: `RSI(t-1) <= 50` AND `RSI(t) > 50`
-- Pullback reset: `min(RSI_14 over 8 candles before t) < 45`
+- Pullback reset: `min(RSI_14 over 12 candles before t) < 50`
 - Optional: `EMA_50 > EMA_200` if `TA2_USE_EMA50_FILTER=true`
 
 **Exit (SELL):**
 - `MACD < MACD_Signal`
 
-`--run-ta` and `--run-ta2` are mutually exclusive. Use one or the other.
-
 ## Rebalancing Rules
-
-**TA Score Calculation:**
-- RSI < 30 or > 70: +1/-1 points
-- EMA crossovers: +1/-1 points
-- MACD signals: +1/-1 points
-- Price vs EMA 200: +1/-1 points
 
 **Trading Rules:**
 1. Take profit on small positions when gain > TAKE_PROFIT_PERCENTAGE

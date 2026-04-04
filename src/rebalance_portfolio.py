@@ -5,23 +5,18 @@ RebalancePortfolio - Generate buy/sell recommendations based on TA signals and h
 This module:
 1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 2. Reads portfolio summary from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
-3. Calculates TA scores based on (TA strategy):
-   - RSI_14 < 30: +1, RSI_14 > 70: -1
-   - EMA_12 > EMA_26: +1, EMA_12 < EMA_26: -1
-   - MACD > MACD_Signal: +1, MACD < MACD_Signal: -1
-   - Close > EMA_200: +1, Close < EMA_200: -1
-4. Alternatively (TA2 strategy, long-only trend-following pullback):
+3. Calculates signals using long-only trend-following pullback strategy:
    - BUY when: Close > EMA_200, MACD > MACD_Signal, Close > EMA_21,
-     RSI_14(t-1) <= 50 AND RSI_14(t) > 50, min(RSI_14 over last 8 candles before t) < 45
+     RSI_14(t-1) <= 50 AND RSI_14(t) > 50, min(RSI_14 over last 12 candles before t) < 50
    - SELL when: MACD < MACD_Signal
-5. Generates signals: score >= 1 = BUY, score <= -1 = SELL
-6. Applies override rules:
+   - Optional: EMA_50 > EMA_200 if TA2_USE_EMA50_FILTER=true
+4. Applies override rules:
    - Rule 1: If holdings < TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
    - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
    - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
-7. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
-8. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
-9. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
+5. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
+6. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
+7. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 """
 import logging
 import csv
@@ -97,70 +92,6 @@ class RebalancePortfolio:
         except Exception as e:
             log.error(f"Failed to read portfolio summary: {e}")
             return None
-
-    def _calculate_ta_score(self, last_row: pd.Series) -> int:
-        """
-        Calculate TA score for the last data point.
-        
-        Scoring rules:
-        - RSI_14 < 30: +1
-        - RSI_14 > 70: -1
-        - EMA_12 > EMA_26: +1
-        - EMA_12 < EMA_26: -1
-        - MACD > MACD_Signal: +1
-        - MACD < MACD_Signal: -1
-        - Close > EMA_200: +1
-        - Close < EMA_200: -1
-        
-        Args:
-            last_row: Last row of TA data
-        
-        Returns:
-            TA score (integer). Returns 0 if calculation fails.
-        """
-        score = 0
-        
-        try:
-            # RSI signals
-            rsi = last_row.get("RSI_14")
-            if pd.notna(rsi):
-                if rsi < 30:
-                    score += 1
-                elif rsi > 70:
-                    score -= 1
-            
-            # EMA crossover signals
-            ema_12 = last_row.get("EMA_12")
-            ema_26 = last_row.get("EMA_26")
-            if pd.notna(ema_12) and pd.notna(ema_26):
-                if ema_12 > ema_26:
-                    score += 1
-                elif ema_12 < ema_26:
-                    score -= 1
-            
-            # MACD signals
-            macd = last_row.get("MACD")
-            macd_signal = last_row.get("MACD_Signal")
-            if pd.notna(macd) and pd.notna(macd_signal):
-                if macd > macd_signal:
-                    score += 1
-                elif macd < macd_signal:
-                    score -= 1
-            
-            # Price vs EMA_200 signals
-            close = last_row.get("Close")
-            ema_200 = last_row.get("EMA_200")
-            if pd.notna(close) and pd.notna(ema_200):
-                if close > ema_200:
-                    score += 1
-                elif close < ema_200:
-                    score -= 1
-        
-        except Exception as e:
-            log.error(f"Error calculating TA score: {e}")
-            return 0
-        
-        return score
 
     def _calculate_ta2_signal(self, ta_df: pd.DataFrame) -> int:
         """
@@ -295,19 +226,14 @@ class RebalancePortfolio:
         else:
             return "HOLD", 3
 
-    def generate_recommendations(self, use_ta2: bool = False) -> List[Dict]:
+    def generate_recommendations(self) -> List[Dict]:
         """
         Generate buy/sell recommendations for all currencies.
-
-        Args:
-            use_ta2: If True, use TA2 (long-only trend-following pullback) strategy.
-                     If False (default), use original TA score strategy.
 
         Returns:
             List of recommendation dictionaries
         """
-        strategy_name = "TA2" if use_ta2 else "TA"
-        log.info("=== Generating rebalancing recommendations (strategy: %s) ===", strategy_name)
+        log.info("=== Generating rebalancing recommendations ===")
         
         # Read portfolio summary
         portfolio_df = self._read_portfolio_summary()
@@ -343,12 +269,8 @@ class RebalancePortfolio:
                 log.warning(f"Skipping {currency_upper} - no TA data")
                 continue
             
-            # Get last row for TA score calculation
-            last_row = ta_df.iloc[-1]
-            if use_ta2:
-                ta_score = self._calculate_ta2_signal(ta_df)
-            else:
-                ta_score = self._calculate_ta_score(last_row)
+            # Calculate TA signal
+            ta_score = self._calculate_ta2_signal(ta_df)
             
             # Generate signal with priority
             signal, priority = self._generate_signal(
@@ -455,22 +377,18 @@ class RebalancePortfolio:
             log.error(f"Failed to save recommendations: {e}")
             return False
 
-    def run(self, use_ta2: bool = False) -> bool:
+    def run(self) -> bool:
         """
         Run the rebalancing process.
-
-        Args:
-            use_ta2: If True, use TA2 strategy for signal generation.
 
         Returns:
             True on success, False on failure
         """
-        strategy_name = "TA2" if use_ta2 else "TA"
-        log.info("=== Starting RebalancePortfolio (strategy: %s) ===", strategy_name)
+        log.info("=== Starting RebalancePortfolio ===")
         
         try:
             # Generate all recommendations
-            all_recommendations = self.generate_recommendations(use_ta2=use_ta2)
+            all_recommendations = self.generate_recommendations()
             
             if not all_recommendations:
                 log.warning("No recommendations generated")
@@ -494,7 +412,7 @@ class RebalancePortfolio:
             return False
 
 
-def rebalance_portfolio_main(cfg: Config, use_ta2: bool = False) -> None:
+def rebalance_portfolio_main(cfg: Config) -> None:
     """
     Main entry point for portfolio rebalancing.
     Called from main.py when --rebalance-portfolio flag is set.
@@ -502,10 +420,9 @@ def rebalance_portfolio_main(cfg: Config, use_ta2: bool = False) -> None:
 
     Args:
         cfg: Application configuration.
-        use_ta2: If True, use TA2 strategy for signal generation.
     """
     rebalancer = RebalancePortfolio(cfg)
-    success = rebalancer.run(use_ta2=use_ta2)
+    success = rebalancer.run()
     if not success:
         log.error("RebalancePortfolio failed")
         raise SystemExit(1)

@@ -33,11 +33,9 @@ The bot operates in 5 main stages (can be run independently or chained):
    - Validates collected data
    - Summarizes portfolio with P&L calculations
 
-2. **Technical Analysis** (`--run-ta` / `--run-ta2`)
-   - `--run-ta` and `--run-ta2` are mutually exclusive
-   - Both calculate the same indicators: RSI (14), EMA (12, 21, 26, 50, 200), MACD with signal and histogram
-   - `--run-ta` uses the original TA score strategy for rebalancing
-   - `--run-ta2` uses the TA2 long-only trend-following pullback strategy for rebalancing
+2. **Technical Analysis** (`--run-ta`)
+   - Calculates indicators: RSI (14), EMA (12, 21, 26, 50, 200), MACD with signal and histogram
+   - Uses long-only trend-following pullback strategy for rebalancing
 
 3. **Portfolio Rebalancing** (`--rebalance-portfolio`)
    - Analyzes TA signals and current holdings
@@ -126,15 +124,9 @@ cryptohunk/
 - Stores TA results for use in rebalancing
 
 ### 7. Portfolio Rebalancing (`rebalance_portfolio.py`)
-**TA Strategy (default, `--run-ta`):**
-- RSI_14 < 30: +1 (oversold), RSI_14 > 70: -1 (overbought)
-- EMA_12 > EMA_26: +1 (bullish), EMA_12 < EMA_26: -1 (bearish)
-- MACD > MACD_Signal: +1 (bullish), MACD < MACD_Signal: -1 (bearish)
-- Close > EMA_200: +1 (uptrend), Close < EMA_200: -1 (downtrend)
-
-**TA2 Strategy (`--run-ta2`) — long-only trend-following pullback:**
+**TA Strategy (`--run-ta`) — long-only trend-following pullback:**
 - BUY when ALL of: Close > EMA_200, MACD > MACD_Signal, Close > EMA_21,
-  RSI crosses up over 50, min(RSI over lookback window before t) < 45
+  RSI crosses up over 50, min(RSI over lookback window before t) < 50
 - Optional: EMA_50 > EMA_200 if `TA2_USE_EMA50_FILTER=true`
 - SELL when: MACD < MACD_Signal
 

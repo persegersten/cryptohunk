@@ -3,7 +3,6 @@
 Tests for RebalancePortfolio module.
 
 These tests validate that the portfolio rebalancing logic works correctly:
-- TA score calculation
 - Signal generation based on TA scores and portfolio rules
 - Multiple BUY recommendations allowed
 - Multiple SELL recommendations
@@ -76,20 +75,47 @@ class TestRebalancePortfolio(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _create_ta_file(self, currency: str, rsi: float, ema_12: float, ema_26: float,
-                        macd: float, macd_signal: float, close: float, ema_200: float):
-        """Create a TA CSV file for testing."""
+                        macd: float, macd_signal: float, close: float, ema_200: float,
+                        ema_21: float = None, ema_50: float = None, n_rows: int = 20,
+                        rsi_prev: float = None, rsi_lookback_min: float = None):
+        """Create a TA CSV file for testing.
+
+        Creates enough rows for the TA2 strategy (LOOKBACK=12, so at least 13 rows).
+        When rsi_prev/rsi_lookback_min are provided, they are used to construct
+        a RSI series that satisfies (or not) the TA2 entry conditions.
+        """
         ta_file = self.ta_dir / f"{currency}_ta.csv"
+
+        if ema_21 is None:
+            ema_21 = close - 100  # default: close > ema_21
+        if ema_50 is None:
+            ema_50 = ema_200 + 500
+        if rsi_prev is None:
+            rsi_prev = 48.0  # default: satisfies RSI cross (<=50)
+        if rsi_lookback_min is None:
+            rsi_lookback_min = 40.0  # default: satisfies pullback reset (<50)
+
+        # Build RSI series with proper lookback window for TA2
+        rsi_values = [55.0] * n_rows
+        # Set lookback window values (indices n_rows-14 to n_rows-2)
+        for i in range(max(0, n_rows - 13), n_rows - 1):
+            rsi_values[i] = rsi_lookback_min
+        rsi_values[-2] = rsi_prev  # t-1
+        rsi_values[-1] = rsi  # t
+
         data = {
-            'Open_Time_ms': [1000000, 1001000, 1002000],
-            'Close_Time_ms': [1000999, 1001999, 1002999],
-            'Close': [close - 100, close - 50, close],
-            'RSI_14': [50.0, 50.0, rsi],
-            'EMA_12': [ema_12 - 10, ema_12 - 5, ema_12],
-            'EMA_26': [ema_26 - 10, ema_26 - 5, ema_26],
-            'EMA_200': [ema_200 - 10, ema_200 - 5, ema_200],
-            'MACD': [macd - 1, macd - 0.5, macd],
-            'MACD_Signal': [macd_signal - 1, macd_signal - 0.5, macd_signal],
-            'MACD_Histogram': [0, 0, macd - macd_signal]
+            'Open_Time_ms': [1000000 + i * 3600000 for i in range(n_rows)],
+            'Close_Time_ms': [1000000 + i * 3600000 + 3599999 for i in range(n_rows)],
+            'Close': [close] * n_rows,
+            'RSI_14': rsi_values,
+            'EMA_12': [ema_12] * n_rows,
+            'EMA_21': [ema_21] * n_rows,
+            'EMA_26': [ema_26] * n_rows,
+            'EMA_50': [ema_50] * n_rows,
+            'EMA_200': [ema_200] * n_rows,
+            'MACD': [macd] * n_rows,
+            'MACD_Signal': [macd_signal] * n_rows,
+            'MACD_Histogram': [macd - macd_signal] * n_rows,
         }
         df = pd.DataFrame(data)
         df.to_csv(ta_file, index=False)
@@ -110,60 +136,6 @@ class TestRebalancePortfolio(unittest.TestCase):
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(portfolio_data)
-
-    def test_calculate_ta_score_buy_signal(self):
-        """Test TA score calculation for strong BUY signal."""
-        rebalancer = RebalancePortfolio(self.cfg)
-        
-        # Create last row with bullish indicators
-        last_row = pd.Series({
-            'RSI_14': 25.0,        # < 30: +1
-            'EMA_12': 50100.0,     # > EMA_26: +1
-            'EMA_26': 50000.0,
-            'MACD': 10.0,          # > Signal: +1
-            'MACD_Signal': 5.0,
-            'Close': 51000.0,      # > EMA_200: +1
-            'EMA_200': 50000.0
-        })
-        
-        score = rebalancer._calculate_ta_score(last_row)
-        self.assertEqual(score, 4)  # All bullish: +4
-
-    def test_calculate_ta_score_sell_signal(self):
-        """Test TA score calculation for strong SELL signal."""
-        rebalancer = RebalancePortfolio(self.cfg)
-        
-        # Create last row with bearish indicators
-        last_row = pd.Series({
-            'RSI_14': 75.0,        # > 70: -1
-            'EMA_12': 49900.0,     # < EMA_26: -1
-            'EMA_26': 50000.0,
-            'MACD': -10.0,         # < Signal: -1
-            'MACD_Signal': -5.0,
-            'Close': 49000.0,      # < EMA_200: -1
-            'EMA_200': 50000.0
-        })
-        
-        score = rebalancer._calculate_ta_score(last_row)
-        self.assertEqual(score, -4)  # All bearish: -4
-
-    def test_calculate_ta_score_neutral(self):
-        """Test TA score calculation for neutral signal."""
-        rebalancer = RebalancePortfolio(self.cfg)
-        
-        # Create last row with neutral indicators
-        last_row = pd.Series({
-            'RSI_14': 50.0,        # Neutral: 0
-            'EMA_12': 50000.0,     # = EMA_26: 0
-            'EMA_26': 50000.0,
-            'MACD': 5.0,           # = MACD_Signal: 0
-            'MACD_Signal': 5.0,    
-            'Close': 50000.0,      # = EMA_200: 0
-            'EMA_200': 50000.0
-        })
-        
-        score = rebalancer._calculate_ta_score(last_row)
-        self.assertEqual(score, 0)  # Neutral
 
     def test_generate_signal_buy(self):
         """Test BUY signal generation."""
@@ -366,25 +338,32 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(final[2]['currency'], 'SOL')  # Lowest
 
     def test_full_pipeline_with_recommendations(self):
-        """Test full rebalancing pipeline."""
-        # Create TA files
+        """Test full rebalancing pipeline with TA2 strategy."""
+        # Create TA files that satisfy TA2 conditions
+        # BTC: BUY signal (all TA2 conditions met: Close > EMA_200, MACD > Signal,
+        #       Close > EMA_21, RSI crosses 50 from below, lookback has RSI < 50)
         self._create_ta_file(
             currency="BTC",
-            rsi=25.0, ema_12=50100.0, ema_26=50000.0,
-            macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0
-        )  # Strong BUY signal (score = 4)
+            rsi=52.0, ema_12=50100.0, ema_26=50000.0,
+            macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0,
+            ema_21=50500.0, rsi_prev=48.0, rsi_lookback_min=40.0
+        )  # BUY signal (ta_score = 1)
         
+        # ETH: BUY signal (same conditions met)
         self._create_ta_file(
             currency="ETH",
-            rsi=35.0, ema_12=3100.0, ema_26=3050.0,
-            macd=5.0, macd_signal=3.0, close=3150.0, ema_200=3100.0
-        )  # Weak BUY signal (score = 3)
+            rsi=52.0, ema_12=3100.0, ema_26=3050.0,
+            macd=5.0, macd_signal=3.0, close=3150.0, ema_200=3000.0,
+            ema_21=3100.0, rsi_prev=48.0, rsi_lookback_min=40.0
+        )  # BUY signal (ta_score = 1)
         
+        # SOL: SELL signal (MACD < MACD_Signal)
         self._create_ta_file(
             currency="SOL",
-            rsi=75.0, ema_12=140.0, ema_26=145.0,
-            macd=-5.0, macd_signal=-3.0, close=138.0, ema_200=145.0
-        )  # Strong SELL signal (score = -4)
+            rsi=45.0, ema_12=140.0, ema_26=145.0,
+            macd=-5.0, macd_signal=-3.0, close=138.0, ema_200=145.0,
+            ema_21=140.0
+        )  # SELL signal (ta_score = -1)
         
         # Create portfolio summary
         portfolio_data = [
@@ -432,7 +411,6 @@ class TestRebalancePortfolio(unittest.TestCase):
         df = pd.read_csv(output_file)
         
         # Should have 3 recommendations: 2 BUYs (BTC and ETH) and 1 SELL (SOL)
-        # Sorted by abs_ta_score: BTC (4), ETH (3), SOL (4)
         self.assertEqual(len(df), 3)
         
         # Verify all recommendations are present
@@ -444,21 +422,16 @@ class TestRebalancePortfolio(unittest.TestCase):
         sell_recs = df[df['signal'] == 'SELL']
         self.assertEqual(len(buy_recs), 2)  # BTC and ETH
         self.assertEqual(len(sell_recs), 1)  # SOL
-        
-        # Verify sorting by abs_ta_score (BTC=4, SOL=-4, ETH=3)
-        # Both BTC and SOL have abs score 4, so BTC comes first (stable sort)
-        self.assertEqual(df.iloc[0]['currency'], 'BTC')
-        self.assertEqual(df.iloc[1]['currency'], 'SOL')
-        self.assertEqual(df.iloc[2]['currency'], 'ETH')
 
     def test_empty_recommendations(self):
         """Test handling of no recommendations (all HOLD)."""
-        # Create TA files with neutral signals
+        # Create TA files with HOLD signals (MACD == MACD_Signal → HOLD in TA2)
         for currency in ["BTC", "ETH", "SOL"]:
             self._create_ta_file(
                 currency=currency,
                 rsi=50.0, ema_12=50000.0, ema_26=50000.0,
-                macd=0.0, macd_signal=0.0, close=50000.0, ema_200=50000.0
+                macd=5.0, macd_signal=5.0, close=50000.0, ema_200=49000.0,
+                ema_21=49500.0
             )
         
         # Create portfolio summary
@@ -491,13 +464,14 @@ class TestRebalancePortfolio(unittest.TestCase):
 
     def test_ta_calculated_even_without_holdings(self):
         """Test that TA is calculated for currencies without holdings to enable future BUY signals."""
-        # Create TA files for both currencies (both should be processed now)
+        # Create TA files for both currencies with TA2 BUY conditions
         for currency in ["BTC", "ETH"]:
             self._create_ta_file(
                 currency=currency,
-                rsi=25.0, ema_12=50100.0, ema_26=50000.0,
-                macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0
-            )  # Strong BUY signal
+                rsi=52.0, ema_12=50100.0, ema_26=50000.0,
+                macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0,
+                ema_21=50500.0, rsi_prev=48.0, rsi_lookback_min=40.0
+            )  # BUY signal (TA2 conditions met)
         
         # Create portfolio summary with one currency having no holdings
         portfolio_data = [
