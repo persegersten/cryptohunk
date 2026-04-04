@@ -235,6 +235,190 @@ class TestBacktestSimulateCurrency(unittest.TestCase):
             self.assertEqual(rec["signal"], "SELL")
 
 
+class TestBacktestSimulateCurrencyTA(unittest.TestCase):
+    """Tests for backtesting with the regular TA strategy (use_ta2=False)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cfg = _make_cfg(self.tmp)
+        self.bt = Backtest(self.cfg, use_ta2=False)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_ta_strategy_buy_signal_with_positive_score(self):
+        """TA strategy should produce BUY when score >= 1.
+
+        Construct data where:
+        - EMA_12 > EMA_26 → +1
+        - MACD > MACD_Signal → +1
+        - Close > EMA_200 → +1
+        - RSI between 30 and 70 → 0
+        → total score = 3 → BUY
+        """
+        n = MIN_CANDLES_FOR_TA + 2
+        rows = []
+        base_close = 50000.0
+        for i in range(n):
+            rows.append({
+                "Close": base_close + i,
+                "RSI_14": 55.0,  # neutral (between 30 and 70)
+                "EMA_12": base_close + 100,  # > EMA_26 → +1
+                "EMA_21": base_close,
+                "EMA_26": base_close - 100,
+                "EMA_50": base_close,
+                "EMA_200": base_close - 1000.0,  # Close > EMA_200 → +1
+                "MACD": 5.0,  # > MACD_Signal → +1
+                "MACD_Signal": 1.0,
+                "Close_Time_ms": 1_000_000 + i * 3600_000,
+            })
+        ta_df = pd.DataFrame(rows)
+
+        records = self.bt._simulate_currency("BTC", ta_df)
+        self.assertTrue(len(records) > 0)
+        for rec in records:
+            self.assertGreaterEqual(rec["ta_signal"], 1)
+            self.assertEqual(rec["signal"], "BUY")
+
+    def test_ta_strategy_sell_signal_with_negative_score(self):
+        """TA strategy should produce SELL when score <= -1.
+
+        Construct data where:
+        - EMA_12 < EMA_26 → -1
+        - MACD < MACD_Signal → -1
+        - Close < EMA_200 → -1
+        - RSI > 70 → -1
+        → total score = -4 → SELL
+        """
+        n = MIN_CANDLES_FOR_TA + 2
+        rows = []
+        base_close = 50000.0
+        for i in range(n):
+            rows.append({
+                "Close": base_close + i,
+                "RSI_14": 75.0,  # > 70 → -1
+                "EMA_12": base_close - 100,  # < EMA_26 → -1
+                "EMA_21": base_close,
+                "EMA_26": base_close + 100,
+                "EMA_50": base_close,
+                "EMA_200": base_close + 5000.0,  # Close < EMA_200 → -1
+                "MACD": 1.0,  # < MACD_Signal → -1
+                "MACD_Signal": 5.0,
+                "Close_Time_ms": 1_000_000 + i * 3600_000,
+            })
+        ta_df = pd.DataFrame(rows)
+
+        records = self.bt._simulate_currency("BTC", ta_df)
+        self.assertTrue(len(records) > 0)
+        for rec in records:
+            self.assertLessEqual(rec["ta_signal"], -1)
+            self.assertEqual(rec["signal"], "SELL")
+
+    def test_ta_strategy_hold_signal_with_zero_score(self):
+        """TA strategy should produce HOLD when score == 0.
+
+        Construct data where all indicators cancel out:
+        - EMA_12 > EMA_26 → +1
+        - MACD < MACD_Signal → -1
+        - Close > EMA_200 → +1
+        - RSI > 70 → -1
+        → total score = 0 → HOLD
+        """
+        n = MIN_CANDLES_FOR_TA + 2
+        rows = []
+        base_close = 50000.0
+        for i in range(n):
+            rows.append({
+                "Close": base_close + i,
+                "RSI_14": 75.0,  # > 70 → -1
+                "EMA_12": base_close + 100,  # > EMA_26 → +1
+                "EMA_21": base_close,
+                "EMA_26": base_close - 100,
+                "EMA_50": base_close,
+                "EMA_200": base_close - 1000.0,  # Close > EMA_200 → +1
+                "MACD": 1.0,  # < MACD_Signal → -1
+                "MACD_Signal": 5.0,
+                "Close_Time_ms": 1_000_000 + i * 3600_000,
+            })
+        ta_df = pd.DataFrame(rows)
+
+        records = self.bt._simulate_currency("BTC", ta_df)
+        self.assertTrue(len(records) > 0)
+        for rec in records:
+            self.assertEqual(rec["ta_signal"], 0)
+            self.assertEqual(rec["signal"], "HOLD")
+
+    def test_ta_strategy_differs_from_ta2(self):
+        """TA and TA2 strategies should produce different signals on the same data.
+
+        This is the core scenario of the bug: data where TA says BUY (score >= 1)
+        but TA2 says HOLD (not all 6 conditions met).
+        """
+        n = MIN_CANDLES_FOR_TA + 2
+        rows = []
+        base_close = 50000.0
+        for i in range(n):
+            rows.append({
+                "Close": base_close + i,
+                "RSI_14": 55.0,  # between 30 and 70 → 0 for TA, but doesn't cross 50 → blocks TA2 BUY
+                "EMA_12": base_close + 100,  # > EMA_26 → +1 for TA
+                "EMA_21": base_close,
+                "EMA_26": base_close - 100,
+                "EMA_50": base_close,
+                "EMA_200": base_close - 1000.0,  # Close > EMA_200 → +1 for TA
+                "MACD": 5.0,  # > MACD_Signal → +1 for TA, but TA2 SELL check passes
+                "MACD_Signal": 1.0,
+                "Close_Time_ms": 1_000_000 + i * 3600_000,
+            })
+        ta_df = pd.DataFrame(rows)
+
+        # TA strategy: score = 3 → BUY
+        bt_ta = Backtest(self.cfg, use_ta2=False)
+        records_ta = bt_ta._simulate_currency("BTC", ta_df)
+        self.assertTrue(len(records_ta) > 0)
+        for rec in records_ta:
+            self.assertEqual(rec["signal"], "BUY",
+                             "TA strategy should produce BUY with score >= 1")
+
+        # TA2 strategy: RSI doesn't cross 50 from below → HOLD
+        bt_ta2 = Backtest(self.cfg, use_ta2=True)
+        records_ta2 = bt_ta2._simulate_currency("BTC", ta_df)
+        self.assertTrue(len(records_ta2) > 0)
+        for rec in records_ta2:
+            self.assertNotEqual(rec["signal"], "BUY",
+                                "TA2 strategy should NOT produce BUY when RSI doesn't cross 50")
+
+
+class TestBacktestRunTA(unittest.TestCase):
+    """Tests for Backtest.run() with use_ta2=False."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_run_ta_creates_output_file(self):
+        """A complete run with TA strategy should create output CSV."""
+        cfg = _make_cfg(self.tmp, currencies=["BTC"])
+        _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 20)
+        bt = Backtest(cfg, use_ta2=False)
+        success = bt.run()
+        self.assertTrue(success)
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
+        self.assertTrue(output_file.exists())
+
+    def test_run_ta_output_has_correct_columns(self):
+        """Output CSV should have exactly the four expected columns."""
+        cfg = _make_cfg(self.tmp, currencies=["BTC"])
+        _write_history_csv(self.tmp, "BTC", n_rows=MIN_CANDLES_FOR_TA + 5)
+        bt = Backtest(cfg, use_ta2=False)
+        bt.run()
+        output_file = Path(self.tmp) / "output" / "backtesting" / "BTC_backtesting.csv"
+        df = pd.read_csv(output_file)
+        self.assertEqual(list(df.columns), ["timestamp_ms", "currency", "ta_signal", "signal"])
+
+
 class TestBacktestSaveResults(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

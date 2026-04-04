@@ -135,7 +135,7 @@ def main():
 
     if args.backtest:
         print("Startar historisk simulering (Backtest)...")
-        backtest_main(cfg)
+        backtest_main(cfg, use_ta2=args.run_ta2)
 
     if args.visualize:
         print("Genererar kurshistorikdiagram (VisualizeHistory)...")
