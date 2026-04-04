@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Backtest - Historisk simulering av TA/TA2-strategin på nedladdad historikdata.
+Backtest - Historisk simulering av TA-strategin på nedladdad historikdata.
 
 Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>_history.csv,
 beräknar tekniska indikatorer och simulerar signaler över hela den tillgängliga
 historiken.
 
-Stödjer båda strategierna:
-- TA2 (long-only trend-following pullback) – standardläge
-- TA (poängbaserad) – används vid use_ta2=False
+Använder long-only trend-following pullback-strategin (TA2).
 
 TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) som används i live-
 rebalansering tillämpas INTE, för att ge en rättvisande bild av strategin i sig.
@@ -44,11 +42,10 @@ MIN_CANDLES_FOR_TA = 200
 
 
 class Backtest:
-    """Historisk simulering av TA/TA2-strategin."""
+    """Historisk simulering av TA-strategin."""
 
-    def __init__(self, cfg: Config, use_ta2: bool = True):
+    def __init__(self, cfg: Config):
         self.cfg = cfg
-        self.use_ta2 = use_ta2
         self.data_root = Path(cfg.data_area_root_dir)
         self.history_root = self.data_root / "history"
         self.output_root = self.data_root / "output" / "backtesting"
@@ -113,8 +110,7 @@ class Backtest:
         Simulera backtesting för en valuta steg för steg.
 
         För varje ljus (candle) från MIN_CANDLES_FOR_TA:
-        1. Beräkna signal med vald strategi (TA eller TA2) med data upp till och
-           inklusive detta ljus.
+        1. Beräkna TA2-signal med data upp till och inklusive detta ljus.
         2. Mappa råa signalen direkt (BUY/SELL/HOLD).
            TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) tillämpas
            INTE vid backtesting, för att ge en rättvisande bild av strategin.
@@ -139,11 +135,8 @@ class Backtest:
             window = ta_df.iloc[: t + 1]
             last = window.iloc[-1]
 
-            # Beräkna signal med vald strategi
-            if self.use_ta2:
-                ta_signal = self._rebalancer._calculate_ta2_signal(window)
-            else:
-                ta_signal = self._rebalancer._calculate_ta_score(last)
+            # Beräkna TA2-signal
+            ta_signal = self._rebalancer._calculate_ta2_signal(window)
 
             # Mappa signalen direkt – TRADE_THRESHOLD-regler hoppas över
             if ta_signal >= 1:
@@ -205,13 +198,10 @@ class Backtest:
         """
         Kör backtesting för alla konfigurerade valutor.
 
-        Använder den strategi (TA eller TA2) som angavs vid instansiering.
-
         Sparar en CSV per valuta i output_root/<CURRENCY>_backtesting.csv.
         Returnerar True vid framgång, False vid fel.
         """
-        strategy_name = "TA2" if self.use_ta2 else "TA"
-        log.info("=== Startar Backtest (strategi: %s) ===", strategy_name)
+        log.info("=== Startar Backtest ===")
         log.info("Valutor: %s", self.cfg.currencies)
 
         # Säkerställ att utdatakatalogen finns innan vi börjar
@@ -242,17 +232,16 @@ class Backtest:
         return success
 
 
-def backtest_main(cfg: Config, use_ta2: bool = True) -> None:
+def backtest_main(cfg: Config) -> None:
     """
     Entrypoint för backtesting, anropas från main.py när --backtest-flaggan är satt.
 
     Args:
         cfg: Konfiguration.
-        use_ta2: Om True, simulera TA2-strategin. Om False, simulera TA-strategin.
 
     Kastar SystemExit(1) vid fel.
     """
-    bt = Backtest(cfg, use_ta2=use_ta2)
+    bt = Backtest(cfg)
     success = bt.run()
     if not success:
         log.error("Backtest misslyckades")

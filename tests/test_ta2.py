@@ -3,13 +3,11 @@
 Tests for TA2 strategy (long-only trend-following pullback).
 
 Covers:
-- --run-ta and --run-ta2 mutual exclusivity
 - TA2 entry detection including RSI cross and reset window excluding entry candle
 - Optional EMA50 filter behaviour
 - TA2 exit (MACD cross down) behaviour
 - That take profit / stop loss overrides still apply when TA2 would otherwise HOLD/BUY/SELL
 """
-import argparse
 import unittest
 import tempfile
 import shutil
@@ -85,40 +83,6 @@ def _build_ta_df(
         "RSI_14": rsi_values,
     }
     return pd.DataFrame(data)
-
-
-class TestMutualExclusivity(unittest.TestCase):
-    """Test that --run-ta and --run-ta2 are mutually exclusive in argparse."""
-
-    def _make_parser(self):
-        parser = argparse.ArgumentParser()
-        ta_group = parser.add_mutually_exclusive_group()
-        ta_group.add_argument("--run-ta", action="store_true")
-        ta_group.add_argument("--run-ta2", action="store_true")
-        return parser
-
-    def test_run_ta_alone(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["--run-ta"])
-        self.assertTrue(args.run_ta)
-        self.assertFalse(args.run_ta2)
-
-    def test_run_ta2_alone(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["--run-ta2"])
-        self.assertFalse(args.run_ta)
-        self.assertTrue(args.run_ta2)
-
-    def test_both_flags_raises(self):
-        parser = self._make_parser()
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--run-ta", "--run-ta2"])
-
-    def test_neither_flag_ok(self):
-        parser = self._make_parser()
-        args = parser.parse_args([])
-        self.assertFalse(args.run_ta)
-        self.assertFalse(args.run_ta2)
 
 
 class TestTA2SignalEntry(unittest.TestCase):
