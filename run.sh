@@ -18,4 +18,4 @@ set -euo pipefail
 PYTHON=${PYTHON:-python3}
 
 echo "Kör AssertEnv och main..."
-$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades
+$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades --backtest --visualize --ftp-upload
