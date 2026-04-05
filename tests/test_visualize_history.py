@@ -391,7 +391,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Green fill color for BUY should appear in the shapes data
-        self.assertIn("rgba(0, 80, 30, 0.20)", html_content)
+        self.assertIn("rgba(0, 96, 36, 0.20)", html_content)
 
     def test_generate_chart_includes_backtest_vrect_for_sell(self):
         """generate_chart should add a red vrect shape when backtest has SELL signals."""
@@ -409,7 +409,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Red fill color for SELL should appear in the shapes data
-        self.assertIn("rgba(80, 0, 0, 0.20)", html_content)
+        self.assertIn("rgba(96, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_vrect_for_hold(self):
         """generate_chart should NOT add colored background for HOLD signals."""
@@ -426,8 +426,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
-        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 96, 36, 0.20)", html_content)
+        self.assertNotIn("rgba(96, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_backtest_no_vrect(self):
         """generate_chart should not crash and produce no colored vrects when backtest file is absent."""
@@ -436,8 +436,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
-        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 96, 36, 0.20)", html_content)
+        self.assertNotIn("rgba(96, 0, 0, 0.20)", html_content)
 
     # ------------------------------------------------------------------
     # _build_portfolio_performance
