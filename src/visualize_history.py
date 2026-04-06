@@ -577,8 +577,8 @@ class VisualizeHistory:
 
         last_date = perf_df["datetime"].max()
         if pd.notna(last_date):
-            one_month_ago = last_date - pd.DateOffset(months=1)
-            fig.update_xaxes(range=[one_month_ago, last_date])
+            one_week_ago = last_date - pd.DateOffset(weeks=1)
+            fig.update_xaxes(range=[one_week_ago, last_date])
 
         log.info("Portföljdiagram byggt")
         return fig.to_html(
@@ -1036,8 +1036,8 @@ class VisualizeHistory:
 
         last_date = df["datetime"].max()
         if pd.notna(last_date):
-            one_month_ago = last_date - pd.DateOffset(months=1)
-            fig.update_xaxes(range=[one_month_ago, last_date], row=1, col=1)
+            one_week_ago = last_date - pd.DateOffset(weeks=1)
+            fig.update_xaxes(range=[one_week_ago, last_date], row=1, col=1)
 
         log.info("Diagram byggt för %s", currency)
         return fig.to_html(
@@ -1102,18 +1102,18 @@ class VisualizeHistory:
             "  if (active) cls += ' vh-tab-active';\n"
             "  return cls;\n"
             "}\n"
-            "function applyLastMonth(chartId) {\n"
+            "function applyLastWeek(chartId) {\n"
             "  var el = document.getElementById(chartId);\n"
             "  if (!el || !el.data || !el.data[0]) return;\n"
             "  var xs = el.data[0].x;\n"
             "  if (!xs || !xs.length) return;\n"
             "  var lastDate = new Date(xs[xs.length - 1]);\n"
             "  var startDate = new Date(lastDate);\n"
-            "  startDate.setMonth(startDate.getMonth() - 1);\n"
+            "  startDate.setDate(startDate.getDate() - 7);\n"
             "  Plotly.relayout(el, {\n"
             "    'xaxis.range[0]': startDate.toISOString(),\n"
             "    'xaxis.range[1]': lastDate.toISOString(),\n"
-            "    'xaxis.rangeselector.active': 1\n"
+            "    'xaxis.rangeselector.active': 0\n"
             "  });\n"
             "}\n"
             "function showChart(c) {\n"
@@ -1126,11 +1126,11 @@ class VisualizeHistory:
             "  var el = document.getElementById('chart-' + c);\n"
             "  if (el) {\n"
             "    Plotly.Plots.resize(el);\n"
-            "    applyLastMonth('chart-' + c);\n"
+            "    applyLastWeek('chart-' + c);\n"
             "  }\n"
             "}\n"
             "window.addEventListener('load', function() {\n"
-            "  if (_currencies.length > 0) applyLastMonth('chart-' + _currencies[0]);\n"
+            "  if (_currencies.length > 0) applyLastWeek('chart-' + _currencies[0]);\n"
             "});\n"
         )
 
