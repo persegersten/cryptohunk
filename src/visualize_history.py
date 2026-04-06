@@ -644,8 +644,20 @@ class VisualizeHistory:
         holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
 
         # Build latest-10-trades table.
+        # The bot trades exclusively on USDC pairs (execute_trade_plan hardcodes
+        # USDC).  Filter out trades from other quote assets (e.g. USDT) that the
+        # data collector may have fetched to avoid misleading duplicates and
+        # incorrect "USDC" labels.
+        usdc_trades = [
+            t for t in trades
+            if str(t.get("symbol", "")).upper().endswith("USDC")
+        ]
+        # Fallback: if no USDC trades exist at all, show everything
+        if not usdc_trades:
+            usdc_trades = list(trades)
+
         # Merge partial fills that share the same orderId+symbol into one row.
-        sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
+        sorted_trades = sorted(usdc_trades, key=lambda t: t.get("time") or 0, reverse=True)
         order_groups: Dict[tuple, List[Dict[str, Any]]] = {}
         for t in sorted_trades:
             oid = t.get("orderId")
@@ -720,7 +732,7 @@ class VisualizeHistory:
             if not is_buyer:
                 # SÄLJ: visa % förändring mot föregående köp
                 preceding_buys = [
-                    t for t in trades
+                    t for t in usdc_trades
                     if str(t.get("symbol", "")).upper().startswith(currency_name)
                     and t.get("isBuyer", False)
                     and (t.get("time") or 0) < (trade_time_ms or 0)
@@ -741,7 +753,7 @@ class VisualizeHistory:
                 # KÖP: visa % förändring från köpkurs mot senaste kurs –
                 # endast om det finns aktivt innehav och ingen efterföljande SÄLJ
                 has_subsequent_sell = any(
-                    t for t in trades
+                    t for t in usdc_trades
                     if str(t.get("symbol", "")).upper().startswith(currency_name)
                     and not t.get("isBuyer", True)
                     and (t.get("time") or 0) > (trade_time_ms or 0)

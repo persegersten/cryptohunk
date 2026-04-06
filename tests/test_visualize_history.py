@@ -1159,6 +1159,42 @@ class TestVisualizeHistory(unittest.TestCase):
         buy_pct_str = f"+{buy_pct:.2f}%"
         self.assertNotIn(buy_pct_str, html)
 
+    def test_generate_summary_html_filters_non_usdc_pairs(self):
+        """Trades from non-USDC pairs should be excluded when USDC trades exist."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            # USDC buy
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.157",
+             "price": "589.16", "quoteQty": "92.50", "time": base_ms},
+            # USDT sell (should be excluded)
+            {"symbol": "BNBUSDT", "isBuyer": False, "qty": "0.134",
+             "price": "591.71", "quoteQty": "79.29", "time": base_ms + 3_600_000},
+            # USDC sell (should be shown)
+            {"symbol": "BNBUSDC", "isBuyer": False, "qty": "0.022",
+             "price": "591.71", "quoteQty": "13.02", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # Only USDC trades: one KÖP and one SÄLJ
+        self.assertEqual(html.count("SÄLJ"), 1)
+        self.assertEqual(html.count("KÖP"), 1)
+        # The USDC sell amount should appear, the USDT one should not
+        self.assertIn("13.02 USDC", html)
+        self.assertNotIn("79.29", html)
+
+    def test_generate_summary_html_fallback_when_no_usdc_trades(self):
+        """All trades shown when no USDC trades exist (fallback)."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # Should still show the trade via fallback
+        self.assertIn("400.00 USDC", html)
+        self.assertIn("KÖP", html)
+
     def test_generate_summary_html_shows_trade_price(self):
         """Trade execution price should appear in the trades table."""
         base_ms = 1_700_000_000_000
