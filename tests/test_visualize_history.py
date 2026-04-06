@@ -1118,21 +1118,46 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertNotIn(buy_pct_str, html)
 
     def test_generate_summary_html_deduplicates_trades(self):
-        """Duplicate trades with the same symbol+id should appear only once."""
+        """Partial fills sharing the same orderId should be merged into one row."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"id": 1, "symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
-            {"id": 2, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
-             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
-            # Duplicate of trade id=2
-            {"id": 2, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
-             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+            # Two fills of the same sell order (orderId=20)
+            {"id": 2, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.008",
+             "price": "42000", "quoteQty": "336.0", "time": base_ms + 3_600_000},
+            {"id": 3, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.002",
+             "price": "42000", "quoteQty": "84.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
         html = viz.generate_summary_html(trades, {})
-        # SÄLJ should appear exactly once
+        # SÄLJ should appear exactly once (merged)
         self.assertEqual(html.count("SÄLJ"), 1)
+        # Merged quoteQty = 336 + 84 = 420
+        self.assertIn("420.00 USDC", html)
+
+    def test_generate_summary_html_buy_no_pct_when_subsequent_sell(self):
+        """Most recent BUY should NOT show % change when a SELL follows (position closed)."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        # Portfolio may still have dust, but there's a subsequent SELL
+        _create_portfolio_json(self.data_root, {"BTC": 0.0001, "USDC": 500.0})
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html(trades, dfs)
+        # Sell pct change (+5.00%) should still appear
+        self.assertIn("+5.00%", html)
+        # BUY should NOT show pct change (position was sold despite dust in portfolio)
+        buy_pct = (40090 - 40000) / 40000 * 100
+        buy_pct_str = f"+{buy_pct:.2f}%"
+        self.assertNotIn(buy_pct_str, html)
 
     def test_generate_summary_html_shows_trade_price(self):
         """Trade execution price should appear in the trades table."""

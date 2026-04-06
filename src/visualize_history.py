@@ -643,19 +643,41 @@ class VisualizeHistory:
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
         holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
 
-        # Build latest-10-trades table (deduplicate by symbol+id)
+        # Build latest-10-trades table.
+        # Merge partial fills that share the same orderId+symbol into one row.
         sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
-        seen_trade_keys: set = set()
-        unique_trades: List[Dict[str, Any]] = []
+        order_groups: Dict[tuple, List[Dict[str, Any]]] = {}
         for t in sorted_trades:
-            tid = t.get("id")
-            if tid is not None:
-                trade_key = (t.get("symbol"), tid)
-                if trade_key in seen_trade_keys:
+            oid = t.get("orderId")
+            if oid is not None:
+                key = (t.get("symbol"), oid)
+                order_groups.setdefault(key, []).append(t)
+
+        merged_trades: List[Dict[str, Any]] = []
+        seen_orders: set = set()
+        for t in sorted_trades:
+            oid = t.get("orderId")
+            if oid is not None:
+                key = (t.get("symbol"), oid)
+                if key in seen_orders:
                     continue
-                seen_trade_keys.add(trade_key)
-            unique_trades.append(t)
-        recent_trades = unique_trades[:10]
+                seen_orders.add(key)
+                fills = order_groups[key]
+                if len(fills) == 1:
+                    merged_trades.append(t)
+                else:
+                    merged = dict(fills[0])
+                    total_qty = sum(float(f.get("qty", 0)) for f in fills)
+                    total_quote = sum(float(f.get("quoteQty", 0)) for f in fills)
+                    if total_qty > 0:
+                        merged["price"] = str(total_quote / total_qty)
+                    merged["qty"] = str(total_qty)
+                    merged["quoteQty"] = str(total_quote)
+                    merged["time"] = max(f.get("time") or 0 for f in fills)
+                    merged_trades.append(merged)
+            else:
+                merged_trades.append(t)
+        recent_trades = merged_trades[:10]
 
         # Identify the index of the most recent BUY in the displayed list
         most_recent_buy_idx = next(
@@ -717,10 +739,21 @@ class VisualizeHistory:
                         pass
             elif row_idx == most_recent_buy_idx:
                 # KÖP: visa % förändring från köpkurs mot senaste kurs –
-                # endast om det finns aktivt innehav i portföljen
+                # endast om det finns aktivt innehav och ingen efterföljande SÄLJ
+                has_subsequent_sell = any(
+                    t for t in trades
+                    if str(t.get("symbol", "")).upper().startswith(currency_name)
+                    and not t.get("isBuyer", True)
+                    and (t.get("time") or 0) > (trade_time_ms or 0)
+                )
                 cur_holdings = portfolio_balances.get(currency_name, 0.0)
                 cur_df = dfs.get(currency_name)
-                if cur_holdings > 0 and cur_df is not None and not cur_df.empty:
+                if (
+                    not has_subsequent_sell
+                    and cur_holdings > 0
+                    and cur_df is not None
+                    and not cur_df.empty
+                ):
                     try:
                         latest_price = float(cur_df["Close"].iloc[-1])
                         buy_price = float(trade.get("price", 0))
