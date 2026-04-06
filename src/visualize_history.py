@@ -643,9 +643,19 @@ class VisualizeHistory:
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
         holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
 
-        # Build latest-10-trades table
+        # Build latest-10-trades table (deduplicate by symbol+id)
         sorted_trades = sorted(trades, key=lambda t: t.get("time") or 0, reverse=True)
-        recent_trades = sorted_trades[:10]
+        seen_trade_keys: set = set()
+        unique_trades: List[Dict[str, Any]] = []
+        for t in sorted_trades:
+            tid = t.get("id")
+            if tid is not None:
+                trade_key = (t.get("symbol"), tid)
+                if trade_key in seen_trade_keys:
+                    continue
+                seen_trade_keys.add(trade_key)
+            unique_trades.append(t)
+        recent_trades = unique_trades[:10]
 
         # Identify the index of the most recent BUY in the displayed list
         most_recent_buy_idx = next(
@@ -706,9 +716,11 @@ class VisualizeHistory:
                     except (ValueError, TypeError):
                         pass
             elif row_idx == most_recent_buy_idx:
-                # KÖP: visa % förändring från köpkurs mot senaste kurs – endast för senaste KÖP
+                # KÖP: visa % förändring från köpkurs mot senaste kurs –
+                # endast om det finns aktivt innehav i portföljen
+                cur_holdings = portfolio_balances.get(currency_name, 0.0)
                 cur_df = dfs.get(currency_name)
-                if cur_df is not None and not cur_df.empty:
+                if cur_holdings > 0 and cur_df is not None and not cur_df.empty:
                     try:
                         latest_price = float(cur_df["Close"].iloc[-1])
                         buy_price = float(trade.get("price", 0))
@@ -891,7 +903,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-up",
                             size=14,
-                            color="#00f064",
+                            color="#00c853",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=buy_labels,
@@ -910,7 +922,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-down",
                             size=14,
-                            color="#ff0000",
+                            color="#d50000",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=sell_labels,
@@ -921,8 +933,8 @@ class VisualizeHistory:
 
         # Bakgrundsfärger baserat på backtestsignaler (BUY=grön, SELL=röd)
         if backtest_df is not None and not backtest_df.empty:
-            BUY_COLOR = "rgba(0, 96, 36, 0.20)"
-            SELL_COLOR = "rgba(96, 0, 0, 0.20)"
+            BUY_COLOR = "rgba(0, 80, 30, 0.20)"
+            SELL_COLOR = "rgba(80, 0, 0, 0.20)"
             chart_end = df["datetime"].max()
             current_signal: Optional[str] = None
             seg_start = None
