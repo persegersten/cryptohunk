@@ -391,7 +391,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Green fill color for BUY should appear in the shapes data
-        self.assertIn("rgba(0, 96, 36, 0.20)", html_content)
+        self.assertIn("rgba(0, 80, 30, 0.20)", html_content)
 
     def test_generate_chart_includes_backtest_vrect_for_sell(self):
         """generate_chart should add a red vrect shape when backtest has SELL signals."""
@@ -409,7 +409,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Red fill color for SELL should appear in the shapes data
-        self.assertIn("rgba(96, 0, 0, 0.20)", html_content)
+        self.assertIn("rgba(80, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_vrect_for_hold(self):
         """generate_chart should NOT add colored background for HOLD signals."""
@@ -426,8 +426,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 96, 36, 0.20)", html_content)
-        self.assertNotIn("rgba(96, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
+        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_backtest_no_vrect(self):
         """generate_chart should not crash and produce no colored vrects when backtest file is absent."""
@@ -436,8 +436,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 96, 36, 0.20)", html_content)
-        self.assertNotIn("rgba(96, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 80, 30, 0.20)", html_content)
+        self.assertNotIn("rgba(80, 0, 0, 0.20)", html_content)
 
     # ------------------------------------------------------------------
     # _build_portfolio_performance
@@ -1067,16 +1067,17 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIn("+5.00%", html)
 
     def test_generate_summary_html_buy_shows_pct_change_vs_latest_price(self):
-        """Only the most recent BUY trade should show % change; earlier BUYs show dash."""
+        """Only the most recent BUY trade should show % change when portfolio has holdings."""
         hist_dir = self.data_root / "history"
         # Latest close price = 40000 + 9*10 = 40090 (index -1 of n=10 prices)
         _create_history_csv(hist_dir, "BTC", n=10)
+        _create_portfolio_json(self.data_root, {"BTC": 0.01, "USDC": 100.0})
         base_ms = 1_700_000_000_000
         trades = [
             # Older BUY – should NOT show % change
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
              "price": "38000", "quoteQty": "380.0", "time": base_ms},
-            # Most recent BUY – SHOULD show % change
+            # Most recent BUY – SHOULD show % change (active holding exists)
             {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms + 3_600_000},
         ]
@@ -1092,6 +1093,107 @@ class TestVisualizeHistory(unittest.TestCase):
         older_pct = (40090 - 38000) / 38000 * 100
         older_str = f"+{older_pct:.2f}%"
         self.assertNotIn(older_str, html)
+
+    def test_generate_summary_html_buy_no_pct_change_when_no_holdings(self):
+        """Most recent BUY should NOT show % change when there are no active holdings."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        # No BTC holdings – position already sold
+        _create_portfolio_json(self.data_root, {"BTC": 0.0, "USDC": 500.0})
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html(trades, dfs)
+        # Sell pct change (+5.00%) should still appear
+        self.assertIn("+5.00%", html)
+        # But the BUY should NOT show a pct change vs latest price
+        buy_pct = (40090 - 40000) / 40000 * 100
+        buy_pct_str = f"+{buy_pct:.2f}%"
+        self.assertNotIn(buy_pct_str, html)
+
+    def test_generate_summary_html_deduplicates_trades(self):
+        """Partial fills sharing the same orderId should be merged into one row."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            # Two fills of the same sell order (orderId=20)
+            {"id": 2, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.008",
+             "price": "42000", "quoteQty": "336.0", "time": base_ms + 3_600_000},
+            {"id": 3, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.002",
+             "price": "42000", "quoteQty": "84.0", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # SÄLJ should appear exactly once (merged)
+        self.assertEqual(html.count("SÄLJ"), 1)
+        # Merged quoteQty = 336 + 84 = 420
+        self.assertIn("420.00 USDC", html)
+
+    def test_generate_summary_html_buy_no_pct_when_subsequent_sell(self):
+        """Most recent BUY should NOT show % change when a SELL follows (position closed)."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        # Portfolio may still have dust, but there's a subsequent SELL
+        _create_portfolio_json(self.data_root, {"BTC": 0.0001, "USDC": 500.0})
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+             "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html(trades, dfs)
+        # Sell pct change (+5.00%) should still appear
+        self.assertIn("+5.00%", html)
+        # BUY should NOT show pct change (position was sold despite dust in portfolio)
+        buy_pct = (40090 - 40000) / 40000 * 100
+        buy_pct_str = f"+{buy_pct:.2f}%"
+        self.assertNotIn(buy_pct_str, html)
+
+    def test_generate_summary_html_filters_non_usdc_pairs(self):
+        """Trades from non-USDC pairs should be excluded when USDC trades exist."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            # USDC buy
+            {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.157",
+             "price": "589.16", "quoteQty": "92.50", "time": base_ms},
+            # USDT sell (should be excluded)
+            {"symbol": "BNBUSDT", "isBuyer": False, "qty": "0.134",
+             "price": "591.71", "quoteQty": "79.29", "time": base_ms + 3_600_000},
+            # USDC sell (should be shown)
+            {"symbol": "BNBUSDC", "isBuyer": False, "qty": "0.022",
+             "price": "591.71", "quoteQty": "13.02", "time": base_ms + 3_600_000},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # Only USDC trades: one KÖP and one SÄLJ
+        self.assertEqual(html.count("SÄLJ"), 1)
+        self.assertEqual(html.count("KÖP"), 1)
+        # The USDC sell amount should appear, the USDT one should not
+        self.assertIn("13.02 USDC", html)
+        self.assertNotIn("79.29", html)
+
+    def test_generate_summary_html_fallback_when_no_usdc_trades(self):
+        """All trades shown when no USDC trades exist (fallback)."""
+        base_ms = 1_700_000_000_000
+        trades = [
+            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+             "price": "40000", "quoteQty": "400.0", "time": base_ms},
+        ]
+        viz = VisualizeHistory(self.cfg)
+        html = viz.generate_summary_html(trades, {})
+        # Should still show the trade via fallback
+        self.assertIn("400.00 USDC", html)
+        self.assertIn("KÖP", html)
 
     def test_generate_summary_html_shows_trade_price(self):
         """Trade execution price should appear in the trades table."""
