@@ -891,7 +891,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-up",
                             size=14,
-                            color="#00c853",
+                            color="#00f064",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=buy_labels,
@@ -910,7 +910,7 @@ class VisualizeHistory:
                         marker=dict(
                             symbol="triangle-down",
                             size=14,
-                            color="#d50000",
+                            color="#ff0000",
                             line=dict(color="#ffffff", width=1),
                         ),
                         text=sell_labels,
@@ -921,8 +921,8 @@ class VisualizeHistory:
 
         # Bakgrundsfärger baserat på backtestsignaler (BUY=grön, SELL=röd)
         if backtest_df is not None and not backtest_df.empty:
-            BUY_COLOR = "rgba(0, 80, 30, 0.20)"
-            SELL_COLOR = "rgba(80, 0, 0, 0.20)"
+            BUY_COLOR = "rgba(0, 96, 36, 0.20)"
+            SELL_COLOR = "rgba(96, 0, 0, 0.20)"
             chart_end = df["datetime"].max()
             current_signal: Optional[str] = None
             seg_start = None
