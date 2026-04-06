@@ -978,8 +978,8 @@ class VisualizeHistory:
 
         # Bakgrundsfärger baserat på backtestsignaler (BUY=grön, SELL=röd)
         if backtest_df is not None and not backtest_df.empty:
-            BUY_COLOR = "rgba(0, 96, 36, 0.20)"
-            SELL_COLOR = "rgba(96, 0, 0, 0.20)"
+            BUY_COLOR = "rgba(0, 115, 43, 0.20)"
+            SELL_COLOR = "rgba(115, 0, 0, 0.20)"
             chart_end = df["datetime"].max()
             current_signal: Optional[str] = None
             seg_start = None
