@@ -5,7 +5,7 @@ Tests for TA2 strategy (long-only MACD-cross trend-following).
 Covers:
 - TA2 entry detection including bullish MACD cross and trend filter
 - Optional EMA50 filter behaviour
-- TA2 exit (MACD cross down) behaviour
+- TA2 exit (MACD bearish or Close < EMA_21) behaviour
 - That take profit / stop loss overrides still apply when TA2 would otherwise HOLD/BUY/SELL
 """
 import unittest

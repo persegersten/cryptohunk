@@ -203,14 +203,14 @@ class RebalancePortfolio:
 
     def _extract_signal_context(self, ta_df: pd.DataFrame) -> tuple:
         """
-        Extract MACD sell condition and EMA50 filter status from TA data.
+        Extract exit condition and EMA50 filter status from TA data.
 
         Args:
             ta_df: DataFrame with TA indicators (needs at least 1 row)
 
         Returns:
             Tuple of (macd_sell, ema50_blocks_buy):
-            - macd_sell: True if MACD < MACD_Signal on the last candle
+            - macd_sell: True if MACD < MACD_Signal or Close < EMA_21 on the last candle
             - ema50_blocks_buy: True if EMA50 filter is enabled and blocks BUY
         """
         if ta_df.empty:
@@ -222,10 +222,16 @@ class RebalancePortfolio:
             val = last.get(col)
             return None if val is None or pd.isna(val) else val
 
-        # MACD sell condition (explicit exit rule)
+        # Exit conditions: MACD bearish OR Close below EMA_21
         macd = safe_get("MACD")
         macd_signal = safe_get("MACD_Signal")
-        macd_sell = macd is not None and macd_signal is not None and macd < macd_signal
+        macd_exit = macd is not None and macd_signal is not None and macd < macd_signal
+
+        close = safe_get("Close")
+        ema_21 = safe_get("EMA_21")
+        ema21_exit = close is not None and ema_21 is not None and close < ema_21
+
+        macd_sell = macd_exit or ema21_exit
 
         # Optional EMA50 trend-strength filter
         ema50_blocks_buy = False
@@ -248,7 +254,9 @@ class RebalancePortfolio:
         - MACD(t) > MACD_Signal(t)        -- bullish MACD cross
         - Optional: EMA_50(t) > EMA_200(t) if cfg.ta2_use_ema50_filter
 
-        Exit (SELL): MACD(t) < MACD_Signal(t)
+        Exit (SELL) when ANY of the following is true:
+        - MACD(t) < MACD_Signal(t)        -- bearish MACD
+        - Close(t) < EMA_21(t)            -- price below short EMA
 
         Returns:
             1 (BUY), -1 (SELL), or 0 (HOLD)
@@ -267,18 +275,22 @@ class RebalancePortfolio:
 
         macd = get(last, "MACD")
         macd_signal = get(last, "MACD_Signal")
+        close = get(last, "Close")
+        ema_21 = get(last, "EMA_21")
 
+        # Exit rule: SELL when MACD < MACD_Signal OR Close < EMA_21
+        macd_exit = macd is not None and macd_signal is not None and macd < macd_signal
+        ema21_exit = close is not None and ema_21 is not None and close < ema_21
+
+        if macd_exit or ema21_exit:
+            return -1
+
+        # Entry rules require MACD values to be present
         if macd is None or macd_signal is None:
             return 0
 
-        # Exit rule: SELL when MACD < MACD_Signal
-        if macd < macd_signal:
-            return -1
-
         # Entry rules (all must be satisfied for BUY)
-        close = get(last, "Close")
         ema_200 = get(last, "EMA_200")
-        ema_21 = get(last, "EMA_21")
         macd_prev = get(prev, "MACD")
         macd_signal_prev = get(prev, "MACD_Signal")
 
@@ -313,8 +325,8 @@ class RebalancePortfolio:
         """
         Generate BUY/SELL/HOLD signal based on continuous TA score and portfolio rules.
 
-        Signal is derived from the graded ta_score and the explicit MACD exit rule:
-        - SELL when MACD < MACD_Signal (exit rule, preserved from original strategy)
+        Signal is derived from the graded ta_score and the explicit exit rules:
+        - SELL when MACD < MACD_Signal OR Close < EMA_21 (exit rule)
         - BUY when ta_score >= _BUY_THRESHOLD and not blocked by EMA50 filter
         - HOLD otherwise
 
@@ -328,7 +340,7 @@ class RebalancePortfolio:
             ta_score: Continuous graded TA score (higher = more bullish)
             current_value_usdc: Current value in USDC
             percentage_change: Percentage change since last purchase
-            macd_sell: True if MACD < MACD_Signal (explicit exit rule)
+            macd_sell: True if MACD < MACD_Signal or Close < EMA_21 (exit rule)
             ema50_blocks_buy: True if EMA50 filter is enabled and blocks BUY
 
         Returns:
@@ -350,7 +362,7 @@ class RebalancePortfolio:
         if current_value_usdc < trade_threshold:
             # Rule 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
             if macd_sell:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite MACD sell, ta_score={ta_score})")
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite TA exit, ta_score={ta_score})")
                 return "HOLD", 3
         else:
             # Rule 2: If holdings >= TRADE_THRESHOLD and loss > stop_loss_percentage, force SELL (high priority)
@@ -358,7 +370,7 @@ class RebalancePortfolio:
                 log.info(f"{currency}: Loss > {stop_loss_pct}% -> SELL (Rule 2 stop loss)")
                 return "SELL", 2
 
-        # Exit rule: MACD < Signal → SELL (preserved from original strategy)
+        # Exit rule: MACD bearish OR Close < EMA_21 → SELL
         if macd_sell:
             return "SELL", 3
 
