@@ -135,42 +135,45 @@ class TestRebalancePortfolio(unittest.TestCase):
             writer.writerows(portfolio_data)
 
     def test_generate_signal_buy(self):
-        """Test BUY signal generation."""
+        """Test BUY signal generation with graded score above threshold."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=2,
+            ta_score=6,
             current_value_usdc=500.0,
-            percentage_change=5.0
+            percentage_change=5.0,
+            macd_sell=False
         )
         
         self.assertEqual(signal, "BUY")
         self.assertEqual(priority, 3)  # TA-based priority
 
     def test_generate_signal_sell(self):
-        """Test SELL signal generation."""
+        """Test SELL signal generation via MACD exit rule."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-2,
+            ta_score=-4,
             current_value_usdc=500.0,
-            percentage_change=5.0
+            percentage_change=5.0,
+            macd_sell=True
         )
         
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 3)  # TA-based priority
 
     def test_generate_signal_hold(self):
-        """Test HOLD signal generation."""
+        """Test HOLD signal generation when score is below BUY threshold and no MACD sell."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=0,
+            ta_score=2,
             current_value_usdc=500.0,
-            percentage_change=5.0
+            percentage_change=5.0,
+            macd_sell=False
         )
         
         self.assertEqual(signal, "HOLD")
@@ -185,7 +188,8 @@ class TestRebalancePortfolio(unittest.TestCase):
             currency="BTC",
             ta_score=0,  # Neutral TA
             current_value_usdc=50.0,  # < 100 USDC threshold
-            percentage_change=15.0    # > 10% profit
+            percentage_change=15.0,   # > 10% profit
+            macd_sell=False
         )
         
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
@@ -198,39 +202,42 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Holdings >= 100 USDC (TRADE_THRESHOLD) AND profit > 10%
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=2,  # Bullish TA (would normally BUY)
+            ta_score=6,  # Bullish TA (would normally BUY)
             current_value_usdc=500.0,  # >= 100 USDC threshold
-            percentage_change=15.0     # > 10% profit
+            percentage_change=15.0,    # > 10% profit
+            macd_sell=False
         )
         
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
         self.assertEqual(priority, 1)  # Rule 1 has highest priority
 
     def test_no_sell_below_threshold(self):
-        """Test Rule 2: holdings < TRADE_THRESHOLD -> no SELL (even if TA says sell)."""
+        """Test Rule 3: holdings < TRADE_THRESHOLD -> no SELL (even if MACD says sell)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings < 100 USDC and profit < 10%
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-2,  # Bearish TA (would normally SELL)
+            ta_score=-4,  # Bearish TA
             current_value_usdc=50.0,  # < 100 USDC threshold
-            percentage_change=5.0     # < 10% profit
+            percentage_change=5.0,    # < 10% profit
+            macd_sell=True  # MACD exit rule triggered
         )
         
         self.assertEqual(signal, "HOLD")  # Should prevent SELL (Rule 3)
         self.assertEqual(priority, 3)  # TA-based priority
 
     def test_sell_allowed_above_threshold(self):
-        """Test that SELL is allowed when holdings >= TRADE_THRESHOLD and TA says sell."""
+        """Test that SELL is allowed when holdings >= TRADE_THRESHOLD and MACD says sell."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings >= 100 USDC and bearish TA
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-2,  # Bearish TA
+            ta_score=-4,  # Bearish TA
             current_value_usdc=150.0,  # >= 100 USDC threshold
-            percentage_change=5.0      # < 10% profit
+            percentage_change=5.0,     # < 10% profit
+            macd_sell=True  # MACD exit rule triggered
         )
         
         self.assertEqual(signal, "SELL")  # SELL is allowed
@@ -243,9 +250,10 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Holdings >= 100 USDC (TRADE_THRESHOLD) AND loss > 6%
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=2,  # Bullish TA (would normally BUY)
+            ta_score=6,  # Bullish TA (would normally BUY)
             current_value_usdc=150.0,  # >= 100 USDC threshold
-            percentage_change=-7.0  # > 6% loss (stop loss triggered)
+            percentage_change=-7.0,  # > 6% loss (stop loss triggered)
+            macd_sell=False
         )
         
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 2 stop loss)
@@ -258,9 +266,10 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Holdings >= 100 USDC but loss < 6%
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=2,  # Bullish TA
+            ta_score=6,  # Bullish TA (score >= BUY_THRESHOLD)
             current_value_usdc=150.0,  # >= 100 USDC threshold
-            percentage_change=-4.0  # < 6% loss (stop loss NOT triggered)
+            percentage_change=-4.0,  # < 6% loss (stop loss NOT triggered)
+            macd_sell=False
         )
         
         self.assertEqual(signal, "BUY")  # Should follow TA
@@ -275,79 +284,80 @@ class TestRebalancePortfolio(unittest.TestCase):
             currency="BTC",
             ta_score=0,  # Neutral TA
             current_value_usdc=50.0,  # < 100 USDC threshold
-            percentage_change=-10.0  # Large loss (but holdings too small)
+            percentage_change=-10.0,  # Large loss (but holdings too small)
+            macd_sell=False
         )
         
         self.assertEqual(signal, "HOLD")  # Stop loss doesn't apply to small holdings
         self.assertEqual(priority, 3)  # TA-based priority
 
     def test_multiple_buys_allowed(self):
-        """Test that multiple BUY recommendations are allowed."""
+        """Test that multiple BUY recommendations are allowed and sorted by ta_score descending."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         recommendations = [
-            {'currency': 'BTC', 'ta_score': 2, 'signal': 'BUY', 
-             'percentage_change': '5.00', 'priority': 3, 'abs_ta_score': 2},
-            {'currency': 'ETH', 'ta_score': 3, 'signal': 'BUY',
-             'percentage_change': '3.00', 'priority': 3, 'abs_ta_score': 3},
-            {'currency': 'SOL', 'ta_score': 1, 'signal': 'BUY',
-             'percentage_change': '2.00', 'priority': 3, 'abs_ta_score': 1},
+            {'currency': 'BTC', 'ta_score': 5, 'signal': 'BUY', 
+             'percentage_change': '5.00', 'priority': 3},
+            {'currency': 'ETH', 'ta_score': 8, 'signal': 'BUY',
+             'percentage_change': '3.00', 'priority': 3},
+            {'currency': 'SOL', 'ta_score': 6, 'signal': 'BUY',
+             'percentage_change': '2.00', 'priority': 3},
         ]
         
         final = rebalancer._select_final_recommendations(recommendations)
         
-        # Should keep all 3 BUYs, sorted by abs_ta_score descending
+        # Should keep all 3 BUYs, sorted by ta_score descending
         self.assertEqual(len(final), 3)
-        self.assertEqual(final[0]['currency'], 'ETH')  # Highest score
-        self.assertEqual(final[0]['ta_score'], 3)
-        self.assertEqual(final[1]['currency'], 'BTC')  # Second highest
-        self.assertEqual(final[1]['ta_score'], 2)
-        self.assertEqual(final[2]['currency'], 'SOL')  # Lowest
-        self.assertEqual(final[2]['ta_score'], 1)
+        self.assertEqual(final[0]['currency'], 'ETH')  # Highest score (8)
+        self.assertEqual(final[0]['ta_score'], 8)
+        self.assertEqual(final[1]['currency'], 'SOL')  # Second highest (6)
+        self.assertEqual(final[1]['ta_score'], 6)
+        self.assertEqual(final[2]['currency'], 'BTC')  # Lowest (5)
+        self.assertEqual(final[2]['ta_score'], 5)
 
-    def test_sort_by_priority_then_abs_score(self):
-        """Test that recommendations are sorted by priority, then by absolute TA score."""
+    def test_sort_by_priority_then_score(self):
+        """Test that recommendations are sorted by priority, then by ta_score within signal type."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         recommendations = [
-            {'currency': 'BTC', 'ta_score': 2, 'signal': 'BUY',
-             'percentage_change': '5.00', 'priority': 3, 'abs_ta_score': 2},
+            {'currency': 'BTC', 'ta_score': 6, 'signal': 'BUY',
+             'percentage_change': '5.00', 'priority': 3},
             {'currency': 'ETH', 'ta_score': -3, 'signal': 'SELL',
-             'percentage_change': '12.00', 'priority': 1, 'abs_ta_score': 3},  # Rule 1 priority
-            {'currency': 'SOL', 'ta_score': -2, 'signal': 'SELL',
-             'percentage_change': '-5.00', 'priority': 3, 'abs_ta_score': 2},  # TA-based
+             'percentage_change': '12.00', 'priority': 1},  # Rule 1 priority
+            {'currency': 'SOL', 'ta_score': -5, 'signal': 'SELL',
+             'percentage_change': '-5.00', 'priority': 3},  # TA-based
         ]
         
         final = rebalancer._select_final_recommendations(recommendations)
         
-        # ETH should come first (priority 1 - Rule 1), then BTC and SOL by abs_ta_score
+        # ETH should come first (priority 1 - Rule 1), then BTC (BUY, priority 3), then SOL (SELL, priority 3)
         self.assertEqual(len(final), 3)
         self.assertEqual(final[0]['currency'], 'ETH')  # Priority 1
         self.assertEqual(final[0]['priority'], 1)
-        # BTC and SOL both have priority 3 and abs_ta_score 2, so stable sort keeps original order
+        # BTC (BUY) before SOL (SELL) within same priority 3
         self.assertEqual(final[1]['currency'], 'BTC')
         self.assertEqual(final[2]['currency'], 'SOL')
 
     def test_multiple_sell_allowed(self):
-        """Test that multiple SELL recommendations are allowed."""
+        """Test that multiple SELL recommendations are allowed and sorted by ta_score ascending (most bearish first)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         recommendations = [
-            {'currency': 'BTC', 'ta_score': -2, 'signal': 'SELL',
-             'percentage_change': '-5.00', 'priority': 2, 'abs_ta_score': 2},
-            {'currency': 'ETH', 'ta_score': -3, 'signal': 'SELL',
-             'percentage_change': '-8.00', 'priority': 2, 'abs_ta_score': 3},
-            {'currency': 'SOL', 'ta_score': -1, 'signal': 'SELL',
-             'percentage_change': '-3.00', 'priority': 2, 'abs_ta_score': 1},
+            {'currency': 'BTC', 'ta_score': -4, 'signal': 'SELL',
+             'percentage_change': '-5.00', 'priority': 2},
+            {'currency': 'ETH', 'ta_score': -7, 'signal': 'SELL',
+             'percentage_change': '-8.00', 'priority': 2},
+            {'currency': 'SOL', 'ta_score': -2, 'signal': 'SELL',
+             'percentage_change': '-3.00', 'priority': 2},
         ]
         
         final = rebalancer._select_final_recommendations(recommendations)
         
-        # Should keep all 3 SELL signals, sorted by abs_ta_score descending
+        # Should keep all 3 SELL signals, sorted by ta_score ascending (most bearish first)
         self.assertEqual(len(final), 3)
-        self.assertEqual(final[0]['currency'], 'ETH')  # Highest abs score
-        self.assertEqual(final[1]['currency'], 'BTC')  # Second highest
-        self.assertEqual(final[2]['currency'], 'SOL')  # Lowest
+        self.assertEqual(final[0]['currency'], 'ETH')  # Most bearish (-7)
+        self.assertEqual(final[1]['currency'], 'BTC')  # Second most bearish (-4)
+        self.assertEqual(final[2]['currency'], 'SOL')  # Least bearish (-2)
 
     def test_full_pipeline_with_recommendations(self):
         """Test full rebalancing pipeline with TA2 strategy."""
@@ -359,7 +369,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             rsi=52.0, ema_12=50100.0, ema_26=50000.0,
             macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0,
             ema_21=50500.0
-        )  # BUY signal (ta_score = 1)
+        )  # BUY signal (graded ta_score = 6: trend+momentum+cross+RSI)
         
         # ETH: BUY signal (same conditions met)
         self._create_ta_file(
@@ -367,7 +377,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             rsi=52.0, ema_12=3100.0, ema_26=3050.0,
             macd=5.0, macd_signal=3.0, close=3150.0, ema_200=3000.0,
             ema_21=3100.0
-        )  # BUY signal (ta_score = 1)
+        )  # BUY signal (graded ta_score = 6)
         
         # SOL: SELL signal (MACD < MACD_Signal)
         self._create_ta_file(
@@ -375,7 +385,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             rsi=45.0, ema_12=140.0, ema_26=145.0,
             macd=-5.0, macd_signal=-3.0, close=138.0, ema_200=145.0,
             ema_21=140.0
-        )  # SELL signal (ta_score = -1)
+        )  # SELL signal (MACD < Signal, graded ta_score = -6)
         
         # Create portfolio summary
         portfolio_data = [
@@ -523,8 +533,7 @@ class TestRebalancePortfolio(unittest.TestCase):
         
         # Should have 2 BUY recommendations: both BTC (no holdings) and ETH (with holdings)
         self.assertEqual(len(df), 2)
-        # ETH should come first (higher abs_ta_score due to more data points)
-        # Both should have BUY signals
+        # Both should have BUY signals (graded ta_score >= BUY_THRESHOLD)
         btc_rec = df[df['currency'] == 'BTC']
         eth_rec = df[df['currency'] == 'ETH']
         self.assertEqual(len(btc_rec), 1)

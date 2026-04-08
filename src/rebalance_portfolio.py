@@ -5,18 +5,24 @@ RebalancePortfolio - Generate buy/sell recommendations based on TA signals and h
 This module:
 1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 2. Reads portfolio summary from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
-3. Calculates signals using long-only MACD-cross trend-following strategy:
-   - BUY when: Close > EMA_200, Close > EMA_21,
-     MACD(t-1) <= MACD_Signal(t-1) AND MACD(t) > MACD_Signal(t) (bullish MACD cross)
-   - SELL when: MACD < MACD_Signal
-   - Optional: EMA_50 > EMA_200 if TA2_USE_EMA50_FILTER=true
-4. Applies override rules:
+3. Calculates a continuous graded ta_score from multiple TA components:
+   - Close vs EMA_200 (±2), Close vs EMA_21 (±1), EMA_21 vs EMA_50 (±1)
+   - MACD vs MACD_Signal (±2), MACD bullish cross (+1)
+   - RSI constructive zone (+1) or weak/overheated (-1)
+   - Chase protection (-1 if price too extended above EMA_21)
+   Score range approximately -8 to +8. Higher = more bullish.
+4. Derives signal from graded score and explicit exit rule:
+   - BUY when ta_score >= 5 (strong bullish setup, requires trend + momentum)
+   - SELL when MACD < MACD_Signal (exit rule preserved from original strategy)
+   - Optional: EMA_50 > EMA_200 filter blocks BUY if TA2_USE_EMA50_FILTER=true
+   - HOLD otherwise
+5. Applies override rules:
    - Rule 1: If profit > take_profit_percentage: SELL (highest priority, overrides TA)
    - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
    - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
-5. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
-6. Multiple BUYs allowed, sorted by priority then absolute TA score (highest first)
-7. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
+6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
+7. Multiple BUYs allowed, sorted by priority then ta_score (highest first for BUY, most bearish first for SELL)
+8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 """
 import logging
 import csv
@@ -32,6 +38,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 class RebalancePortfolio:
     """Generate portfolio rebalancing recommendations based on TA signals."""
+
+    # Minimum graded ta_score required for a BUY signal.
+    # Requires at minimum Close > EMA_200 (+2) and MACD > Signal (+2) plus
+    # at least one additional bullish component.
+    _BUY_THRESHOLD = 5
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -92,6 +103,138 @@ class RebalancePortfolio:
         except Exception as e:
             log.error(f"Failed to read portfolio summary: {e}")
             return None
+
+    def _calculate_ta_score(self, ta_df: pd.DataFrame) -> int:
+        """
+        Calculate continuous graded TA score for ranking.
+
+        The score is built from multiple technical analysis components so that
+        different currencies can be ranked against each other.  Higher positive
+        score = stronger bullish setup; more negative = weaker / more bearish.
+
+        Bullish components:
+        - +2 if Close > EMA_200  (long-term trend)
+        - +1 if Close > EMA_21   (short-term trend)
+        - +1 if EMA_21 > EMA_50  (trend alignment)
+        - +2 if MACD > MACD_Signal (momentum)
+        - +1 if MACD bullish cross on current candle
+        - +1 if RSI_14 in constructive zone (50–65)
+
+        Bearish / weakening components:
+        - -2 if Close <= EMA_200
+        - -1 if Close <= EMA_21
+        - -1 if EMA_21 <= EMA_50
+        - -2 if MACD <= MACD_Signal
+        - -1 if RSI_14 < 45  (weak)
+        - -1 if RSI_14 > 70  (overheated)
+
+        Chase protection:
+        - -1 if Close is more than 3 % above EMA_21
+
+        Range: approximately -8 to +8.
+
+        Args:
+            ta_df: DataFrame with TA indicators (at least 2 rows needed for
+                   MACD-cross detection; returns 0 if fewer)
+
+        Returns:
+            Graded integer score.
+        """
+        if len(ta_df) < 2:
+            return 0
+
+        last = ta_df.iloc[-1]
+        prev = ta_df.iloc[-2]
+
+        def get(row, col):
+            val = row.get(col)
+            return None if val is None or pd.isna(val) else val
+
+        score = 0
+
+        close = get(last, "Close")
+        ema_200 = get(last, "EMA_200")
+        ema_21 = get(last, "EMA_21")
+        ema_50 = get(last, "EMA_50")
+        macd = get(last, "MACD")
+        macd_signal = get(last, "MACD_Signal")
+        macd_prev = get(prev, "MACD")
+        macd_signal_prev = get(prev, "MACD_Signal")
+        rsi = get(last, "RSI_14")
+
+        # Close vs EMA_200 (long-term trend: ±2)
+        if close is not None and ema_200 is not None:
+            score += 2 if close > ema_200 else -2
+
+        # Close vs EMA_21 (short-term trend: ±1)
+        if close is not None and ema_21 is not None:
+            score += 1 if close > ema_21 else -1
+
+        # EMA_21 vs EMA_50 (trend alignment: ±1)
+        if ema_21 is not None and ema_50 is not None:
+            score += 1 if ema_21 > ema_50 else -1
+
+        # MACD vs MACD_Signal (momentum: ±2)
+        if macd is not None and macd_signal is not None:
+            score += 2 if macd > macd_signal else -2
+
+        # MACD bullish cross on current candle (+1)
+        if all(v is not None for v in [macd, macd_signal, macd_prev, macd_signal_prev]):
+            if macd_prev <= macd_signal_prev and macd > macd_signal:
+                score += 1
+
+        # RSI zone (+1 constructive, -1 weak or overheated)
+        if rsi is not None:
+            if 50 <= rsi <= 65:
+                score += 1
+            elif rsi < 45:
+                score -= 1
+            elif rsi > 70:
+                score -= 1
+
+        # Chase protection: penalty if price is too far above EMA_21
+        if close is not None and ema_21 is not None and ema_21 > 0 and close > ema_21:
+            stretch = close / ema_21 - 1
+            if stretch > 0.03:
+                score -= 1
+
+        return score
+
+    def _extract_signal_context(self, ta_df: pd.DataFrame) -> tuple:
+        """
+        Extract MACD sell condition and EMA50 filter status from TA data.
+
+        Args:
+            ta_df: DataFrame with TA indicators (needs at least 1 row)
+
+        Returns:
+            Tuple of (macd_sell, ema50_blocks_buy):
+            - macd_sell: True if MACD < MACD_Signal on the last candle
+            - ema50_blocks_buy: True if EMA50 filter is enabled and blocks BUY
+        """
+        if ta_df.empty:
+            return False, False
+
+        last = ta_df.iloc[-1]
+
+        def safe_get(col):
+            val = last.get(col)
+            return None if val is None or pd.isna(val) else val
+
+        # MACD sell condition (explicit exit rule)
+        macd = safe_get("MACD")
+        macd_signal = safe_get("MACD_Signal")
+        macd_sell = macd is not None and macd_signal is not None and macd < macd_signal
+
+        # Optional EMA50 trend-strength filter
+        ema50_blocks_buy = False
+        if self.cfg.ta2_use_ema50_filter:
+            ema_50 = safe_get("EMA_50")
+            ema_200 = safe_get("EMA_200")
+            if ema_50 is None or ema_200 is None or ema_50 <= ema_200:
+                ema50_blocks_buy = True
+
+        return macd_sell, ema50_blocks_buy
 
     def _calculate_ta2_signal(self, ta_df: pd.DataFrame) -> int:
         """
@@ -163,57 +306,66 @@ class RebalancePortfolio:
 
         return 1
 
-    def _generate_signal(self, currency: str, ta_score: int, 
-                        current_value_usdc: float, percentage_change: float) -> tuple:
+    def _generate_signal(self, currency: str, ta_score: int,
+                        current_value_usdc: float, percentage_change: float,
+                        macd_sell: bool, ema50_blocks_buy: bool = False) -> tuple:
         """
-        Generate BUY/SELL/HOLD signal based on TA score and portfolio rules.
-        
-        Rules:
+        Generate BUY/SELL/HOLD signal based on continuous TA score and portfolio rules.
+
+        Signal is derived from the graded ta_score and the explicit MACD exit rule:
+        - SELL when MACD < MACD_Signal (exit rule, preserved from original strategy)
+        - BUY when ta_score >= _BUY_THRESHOLD and not blocked by EMA50 filter
+        - HOLD otherwise
+
+        Portfolio override rules (applied first):
         - Rule 1: If profit > take_profit_percentage: SELL (highest priority, overrides TA)
-        - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
-        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
-        - Otherwise: TA-based signals (score >= 1: BUY, score <= -1: SELL)
-        
+        - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL
+        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1)
+
         Args:
             currency: Currency symbol
-            ta_score: TA score
+            ta_score: Continuous graded TA score (higher = more bullish)
             current_value_usdc: Current value in USDC
             percentage_change: Percentage change since last purchase
-        
+            macd_sell: True if MACD < MACD_Signal (explicit exit rule)
+            ema50_blocks_buy: True if EMA50 filter is enabled and blocks BUY
+
         Returns:
             Tuple of (signal, priority) where:
             - signal: "BUY", "SELL", or "HOLD"
-            - priority: 1 for Rule 1 (take profit), 
+            - priority: 1 for Rule 1 (take profit),
                        2 for Rule 2 (stop loss), 3 for TA-based
         """
         trade_threshold = self.cfg.trade_threshold
         take_profit_pct = self.cfg.take_profit_percentage
         stop_loss_pct = self.cfg.stop_loss_percentage
-        
+
         # Rule 1: If profit > take_profit_percentage, force SELL (highest priority, overrides TA)
         if percentage_change > take_profit_pct:
             log.info(f"{currency}: Profit > {take_profit_pct}% -> SELL (Rule 1 take profit)")
             return "SELL", 1
-        
+
         # Check if holdings are below threshold
         if current_value_usdc < trade_threshold:
             # Rule 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
-            if ta_score <= -1:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite TA score {ta_score})")
+            if macd_sell:
+                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite MACD sell, ta_score={ta_score})")
                 return "HOLD", 3
         else:
             # Rule 2: If holdings >= TRADE_THRESHOLD and loss > stop_loss_percentage, force SELL (high priority)
             if percentage_change < -stop_loss_pct:
                 log.info(f"{currency}: Loss > {stop_loss_pct}% -> SELL (Rule 2 stop loss)")
                 return "SELL", 2
-        
-        # TA-based signals for normal cases
-        if ta_score >= 1:
-            return "BUY", 3
-        elif ta_score <= -1:
+
+        # Exit rule: MACD < Signal → SELL (preserved from original strategy)
+        if macd_sell:
             return "SELL", 3
-        else:
-            return "HOLD", 3
+
+        # BUY if score indicates strong bullish setup and not blocked by EMA50 filter
+        if ta_score >= self._BUY_THRESHOLD and not ema50_blocks_buy:
+            return "BUY", 3
+
+        return "HOLD", 3
 
     def generate_recommendations(self) -> List[Dict]:
         """
@@ -258,12 +410,16 @@ class RebalancePortfolio:
                 log.warning(f"Skipping {currency_upper} - no TA data")
                 continue
             
-            # Calculate TA signal
-            ta_score = self._calculate_ta2_signal(ta_df)
+            # Calculate graded TA score
+            ta_score = self._calculate_ta_score(ta_df)
+
+            # Extract signal context (MACD sell condition, EMA50 filter)
+            macd_sell, ema50_blocks_buy = self._extract_signal_context(ta_df)
             
             # Generate signal with priority
             signal, priority = self._generate_signal(
-                currency_upper, ta_score, current_value_usdc, percentage_change
+                currency_upper, ta_score, current_value_usdc, percentage_change,
+                macd_sell=macd_sell, ema50_blocks_buy=ema50_blocks_buy
             )
             
             # Create recommendation
@@ -273,7 +429,6 @@ class RebalancePortfolio:
                 'ta_score': ta_score,
                 'signal': signal,
                 'priority': priority,
-                'abs_ta_score': abs(ta_score)
             }
             
             recommendations.append(recommendation)
@@ -287,9 +442,10 @@ class RebalancePortfolio:
         Select and sort final recommendations according to rules:
         - Multiple BUYs allowed
         - Multiple SELLs allowed
-        - Sort by priority: Rule 1 (10% rule) > TA-based
-        - Within same priority, sort by absolute TA score (highest first)
-        - Within same absolute score, keep original order
+        - Sort by priority ascending (Rule 1 first, then Rule 2, then TA-based)
+        - Within same priority:
+          - BUY candidates: highest ta_score first (strongest bullish first)
+          - SELL candidates: lowest ta_score first (strongest bearish first)
         
         Args:
             recommendations: List of all recommendations
@@ -304,17 +460,22 @@ class RebalancePortfolio:
             return []
         
         # Sort by:
-        # 1. Priority (ascending: 1=Rule 1 comes first, 2=TA-based)
-        # 2. Absolute TA score (descending: highest first)
-        # 3. Keep stable sort for original order on ties
-        active_recommendations.sort(
-            key=lambda x: (x['priority'], -x['abs_ta_score'])
-        )
+        # 1. Priority ascending (1=Rule 1 comes first)
+        # 2. BUY before SELL within same priority (signal_order: BUY=0, SELL=1)
+        # 3. BUY: highest ta_score first (-ta_score ascending)
+        #    SELL: lowest ta_score first (ta_score ascending)
+        def _sort_key(rec):
+            if rec['signal'] == 'BUY':
+                return (rec['priority'], 0, -rec['ta_score'])
+            else:  # SELL
+                return (rec['priority'], 1, rec['ta_score'])
+
+        active_recommendations.sort(key=_sort_key)
         
         log.info(f"Selected {len(active_recommendations)} recommendations after filtering HOLD signals")
         for rec in active_recommendations:
             log.info(f"  {rec['signal']}: {rec['currency']} "
-                    f"(priority={rec['priority']}, abs_ta_score={rec['abs_ta_score']}, ta_score={rec['ta_score']})")
+                    f"(priority={rec['priority']}, ta_score={rec['ta_score']})")
         
         return active_recommendations
 
