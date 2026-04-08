@@ -130,7 +130,7 @@ class TestTA2SignalEntry(unittest.TestCase):
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, 1)  # BUY
 
-    def test_not_enough_rows_returns_hold(self):
+    def test_minimal_rows_returns_valid_signal(self):
         df = _build_ta_df(n_rows=2)
         # Only 2 rows - minimal, but should work (we need at least 2)
         result = self.rebalancer._calculate_ta2_signal(df)
@@ -138,7 +138,15 @@ class TestTA2SignalEntry(unittest.TestCase):
         self.assertIn(result, [0, 1, -1])
 
     def test_single_row_returns_hold(self):
-        df = _build_ta_df(n_rows=3).iloc[:1]  # Only 1 row
+        data = {
+            "Close": [55000.0],
+            "EMA_200": [50000.0],
+            "EMA_21": [54000.0],
+            "EMA_50": [52000.0],
+            "MACD": [10.0],
+            "MACD_Signal": [5.0],
+        }
+        df = pd.DataFrame(data)
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, 0)  # HOLD
 
