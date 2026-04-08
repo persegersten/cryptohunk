@@ -275,7 +275,7 @@ class TestTA2OverrideRules(unittest.TestCase):
             currency="BTC",
             ta_score=-1,  # TA2 SELL
             current_value_usdc=500.0,  # >= 100 threshold
-            percentage_change=5.0,
+            percentage_change=2.0,     # < 3% take_profit, so TA signal applies
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 3)
@@ -286,10 +286,21 @@ class TestTA2OverrideRules(unittest.TestCase):
             currency="BTC",
             ta_score=1,   # TA2 BUY
             current_value_usdc=500.0,
-            percentage_change=5.0,
+            percentage_change=2.0,     # < 3% take_profit, so TA signal applies
         )
         self.assertEqual(signal, "BUY")
         self.assertEqual(priority, 3)
+
+    def test_take_profit_triggers_above_threshold(self):
+        """Rule 1: profit > take_profit_pct → SELL even when holdings >= threshold."""
+        signal, priority = self.rebalancer._generate_signal(
+            currency="BTC",
+            ta_score=1,   # TA2 BUY (would normally buy)
+            current_value_usdc=500.0,  # >= 100 threshold
+            percentage_change=5.0,     # > 3% take_profit
+        )
+        self.assertEqual(signal, "SELL")
+        self.assertEqual(priority, 1)
 
 
 if __name__ == "__main__":

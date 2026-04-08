@@ -6,7 +6,7 @@ These tests validate that the portfolio rebalancing logic works correctly:
 - Signal generation based on TA scores and portfolio rules
 - Multiple BUY recommendations allowed
 - Multiple SELL recommendations
-- Rule 1: holdings < TRADE_THRESHOLD AND profit > take_profit_percentage -> SELL (overrides TA)
+- Rule 1: profit > take_profit_percentage -> SELL (overrides TA, regardless of holdings size)
 - Rule 2: holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage -> SELL (overrides TA)
 - Rule 3: holdings < TRADE_THRESHOLD -> no SELL (unless Rule 1 applies)
 - TA is calculated for all configured currencies, even those without holdings
@@ -180,7 +180,7 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(priority, 3)  # TA-based priority
 
     def test_override_sell_with_profit_above_10_percent(self):
-        """Test Rule 1: holdings < TRADE_THRESHOLD AND profit > 10% -> SELL (highest priority)."""
+        """Test Rule 1: profit > 10% -> SELL (highest priority)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings < 100 USDC (TRADE_THRESHOLD) AND profit > 10%
@@ -189,6 +189,21 @@ class TestRebalancePortfolio(unittest.TestCase):
             ta_score=0,  # Neutral TA
             current_value_usdc=50.0,  # < 100 USDC threshold
             percentage_change=15.0    # > 10% profit
+        )
+        
+        self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
+        self.assertEqual(priority, 1)  # Rule 1 has highest priority
+
+    def test_take_profit_triggers_above_threshold(self):
+        """Test Rule 1: profit > 10% -> SELL even when holdings >= TRADE_THRESHOLD."""
+        rebalancer = RebalancePortfolio(self.cfg)
+        
+        # Holdings >= 100 USDC (TRADE_THRESHOLD) AND profit > 10%
+        signal, priority = rebalancer._generate_signal(
+            currency="BTC",
+            ta_score=2,  # Bullish TA (would normally BUY)
+            current_value_usdc=500.0,  # >= 100 USDC threshold
+            percentage_change=15.0     # > 10% profit
         )
         
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
