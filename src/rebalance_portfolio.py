@@ -5,9 +5,9 @@ RebalancePortfolio - Generate buy/sell recommendations based on TA signals and h
 This module:
 1. Reads TA signals from DATA_AREA_ROOT_DIR/ta/<currency>_ta.csv
 2. Reads portfolio summary from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
-3. Calculates signals using long-only trend-following pullback strategy:
-   - BUY when: Close > EMA_200, MACD > MACD_Signal, Close > EMA_21,
-     RSI_14(t-1) <= 50 AND RSI_14(t) > 50, min(RSI_14 over last 12 candles before t) < 50
+3. Calculates signals using long-only MACD-cross trend-following strategy:
+   - BUY when: Close > EMA_200, Close > EMA_21,
+     MACD(t-1) <= MACD_Signal(t-1) AND MACD(t) > MACD_Signal(t) (bullish MACD cross)
    - SELL when: MACD < MACD_Signal
    - Optional: EMA_50 > EMA_200 if TA2_USE_EMA50_FILTER=true
 4. Applies override rules:
@@ -95,14 +95,13 @@ class RebalancePortfolio:
 
     def _calculate_ta2_signal(self, ta_df: pd.DataFrame) -> int:
         """
-        Calculate TA2 signal (long-only trend-following pullback strategy).
+        Calculate TA2 signal (long-only MACD-cross trend-following strategy).
 
         Entry (BUY) when all conditions are true on the latest candle t:
         - Close(t) > EMA_200(t)           -- trend filter
-        - MACD(t) > MACD_Signal(t)        -- momentum confirmation
         - Close(t) > EMA_21(t)            -- price above short EMA
-        - RSI_14(t-1) <= 50 AND RSI_14(t) > 50  -- RSI crosses up over 50
-        - min(RSI_14(t-12)...RSI_14(t-1)) < 50  -- pullback/reset (excl. entry candle)
+        - MACD(t-1) <= MACD_Signal(t-1)   -- previous candle not bullish
+        - MACD(t) > MACD_Signal(t)        -- bullish MACD cross
         - Optional: EMA_50(t) > EMA_200(t) if cfg.ta2_use_ema50_filter
 
         Exit (SELL): MACD(t) < MACD_Signal(t)
@@ -110,10 +109,8 @@ class RebalancePortfolio:
         Returns:
             1 (BUY), -1 (SELL), or 0 (HOLD)
         """
-        LOOKBACK = 12
-
-        if len(ta_df) < LOOKBACK + 1:
-            log.debug("TA2: not enough rows for lookback (%d < %d)", len(ta_df), LOOKBACK + 1)
+        if len(ta_df) < 2:
+            log.debug("TA2: not enough rows (need at least 2, have %d)", len(ta_df))
             return 0
 
         last = ta_df.iloc[-1]
@@ -138,35 +135,27 @@ class RebalancePortfolio:
         close = get(last, "Close")
         ema_200 = get(last, "EMA_200")
         ema_21 = get(last, "EMA_21")
-        rsi_t = get(last, "RSI_14")
-        rsi_prev = get(prev, "RSI_14")
+        macd_prev = get(prev, "MACD")
+        macd_signal_prev = get(prev, "MACD_Signal")
 
-        if any(v is None for v in [close, ema_200, ema_21, rsi_t, rsi_prev]):
+        if any(v is None for v in [close, ema_200, ema_21, macd_prev, macd_signal_prev]):
             return 0
 
         # 1. Trend filter
         if close <= ema_200:
             return 0
 
-        # 2. Momentum confirmation (MACD > MACD_Signal; equal counts as HOLD)
-        if macd <= macd_signal:
-            return 0
-
-        # 3. Price above short EMA
+        # 2. Price above short EMA
         if close <= ema_21:
             return 0
 
-        # 4. RSI crosses up over 50
-        if rsi_prev > 50 or rsi_t <= 50:
+        # 3. Bullish MACD cross: MACD(t-1) <= MACD_Signal(t-1) AND MACD(t) > MACD_Signal(t)
+        if macd_prev > macd_signal_prev:
+            return 0
+        if macd <= macd_signal:
             return 0
 
-        # 5. Pullback/reset: min(RSI_14(t-12)...RSI_14(t-1)) < 50
-        #    Indices: t-12 to t-1 = ta_df["RSI_14"].iloc[-(LOOKBACK+1):-1]
-        rsi_lookback = ta_df["RSI_14"].iloc[-(LOOKBACK + 1):-1]
-        if rsi_lookback.isna().any() or rsi_lookback.min() >= 50:
-            return 0
-
-        # 6. Optional EMA50 trend-strength filter
+        # 4. Optional EMA50 trend-strength filter
         if self.cfg.ta2_use_ema50_filter:
             ema_50 = get(last, "EMA_50")
             if ema_50 is None or ema_50 <= ema_200:
