@@ -6,7 +6,8 @@ These tests validate that the trade plan generation logic works correctly:
 - Reads portfolio and recommendations correctly
 - Processes SELL recommendations first (only if value > TRADE_THRESHOLD)
 - Calculates liquid funds correctly after SELLs
-- Processes BUY recommendations (max 1, only if liquid funds > TRADE_THRESHOLD)
+- Processes BUY recommendations (up to 2, only if liquid funds > TRADE_THRESHOLD)
+- Falls back to 1 BUY if split amounts are below threshold
 - Saves trade plan correctly
 """
 import unittest
@@ -223,8 +224,8 @@ class TestCreateTradePlan(unittest.TestCase):
         trade_plan = self._read_trade_plan()
         self.assertEqual(len(trade_plan), 0)
 
-    def test_multiple_sells_one_buy(self):
-        """Test multiple SELLs followed by one BUY."""
+    def test_multiple_sells_two_buys(self):
+        """Test multiple SELLs followed by two BUYs with equal allocation."""
         # Create portfolio
         portfolio = [
             {'currency': 'USDC', 'balance': 50.0, 'current_rate_usdc': 1.0, 
@@ -257,21 +258,22 @@ class TestCreateTradePlan(unittest.TestCase):
         
         self.assertTrue(success)
         
-        # Verify trade plan: 2 SELLs + 1 BUY
+        # Verify trade plan: 2 SELLs + 2 BUYs (liquid_funds=600, allocation=300 each, both > threshold 100)
         trade_plan = self._read_trade_plan()
-        self.assertEqual(len(trade_plan), 3)
+        self.assertEqual(len(trade_plan), 4)
         
         # Check SELLs
         sells = [t for t in trade_plan if t['action'] == 'SELL']
         self.assertEqual(len(sells), 2)
         
-        # Check BUY (should be only one)
+        # Check BUYs (should be two with equal allocation)
         buys = [t for t in trade_plan if t['action'] == 'BUY']
-        self.assertEqual(len(buys), 1)
+        self.assertEqual(len(buys), 2)
         self.assertEqual(buys[0]['currency'], 'SOL')
-        self.assertEqual(buys[0]['amount'], 'ALL')
-        # Should be: 50 (initial USDC) + 250 (BTC) + 300 (ETH) = 600
-        self.assertEqual(float(buys[0]['value_usdc']), 600.0)
+        self.assertEqual(buys[1]['currency'], 'ADA')
+        # Should be: 50 (initial USDC) + 250 (BTC) + 300 (ETH) = 600, split = 300 each
+        self.assertEqual(float(buys[0]['value_usdc']), 300.0)
+        self.assertEqual(float(buys[1]['value_usdc']), 300.0)
 
     def test_empty_recommendations(self):
         """Test with empty recommendations."""
@@ -338,6 +340,105 @@ class TestCreateTradePlan(unittest.TestCase):
         self.assertEqual(trade_plan[1]['action'], 'BUY')
         self.assertEqual(trade_plan[1]['currency'], 'ETH')
         self.assertEqual(float(trade_plan[1]['value_usdc']), 300.0)
+
+
+    def test_two_buys_split_below_threshold_fallback(self):
+        """Test fallback to single BUY when split allocation is below threshold."""
+        # Create portfolio with 180 USDC (split = 90, which is below threshold of 100)
+        portfolio = [
+            {'currency': 'USDC', 'balance': 180.0, 'current_rate_usdc': 1.0, 
+             'current_value_usdc': 180.0, 'previous_rate_usdc': 1.0,
+             'percentage_change': 0.0, 'value_change_usdc': 0.0}
+        ]
+        self._create_portfolio_summary(portfolio)
+        
+        # Create 2 BUY recommendations
+        recommendations = [
+            {'currency': 'ETH', 'percentage_change': '0.00', 'ta_score': 3, 'signal': 'BUY'},
+            {'currency': 'SOL', 'percentage_change': '0.00', 'ta_score': 2, 'signal': 'BUY'}
+        ]
+        self._create_recommendations(recommendations)
+        
+        # Generate trade plan
+        creator = CreateTradePlan(self.cfg)
+        success = creator.run()
+        
+        self.assertTrue(success)
+        
+        # Split 90/90 is below threshold 100, so fallback to single BUY with all funds
+        trade_plan = self._read_trade_plan()
+        self.assertEqual(len(trade_plan), 1)
+        self.assertEqual(trade_plan[0]['action'], 'BUY')
+        self.assertEqual(trade_plan[0]['currency'], 'ETH')  # First candidate
+        self.assertEqual(trade_plan[0]['amount'], 'ALL')
+        self.assertEqual(float(trade_plan[0]['value_usdc']), 180.0)
+
+    def test_two_buys_with_sufficient_funds(self):
+        """Test 2 BUYs with equal allocation when both exceed threshold."""
+        # Create portfolio with 400 USDC (split = 200 each, both > threshold 100)
+        portfolio = [
+            {'currency': 'USDC', 'balance': 400.0, 'current_rate_usdc': 1.0, 
+             'current_value_usdc': 400.0, 'previous_rate_usdc': 1.0,
+             'percentage_change': 0.0, 'value_change_usdc': 0.0}
+        ]
+        self._create_portfolio_summary(portfolio)
+        
+        # Create 2 BUY recommendations
+        recommendations = [
+            {'currency': 'ETH', 'percentage_change': '0.00', 'ta_score': 3, 'signal': 'BUY'},
+            {'currency': 'SOL', 'percentage_change': '0.00', 'ta_score': 2, 'signal': 'BUY'}
+        ]
+        self._create_recommendations(recommendations)
+        
+        # Generate trade plan
+        creator = CreateTradePlan(self.cfg)
+        success = creator.run()
+        
+        self.assertTrue(success)
+        
+        # Both allocations 200 > threshold 100, so 2 BUYs
+        trade_plan = self._read_trade_plan()
+        self.assertEqual(len(trade_plan), 2)
+        self.assertEqual(trade_plan[0]['action'], 'BUY')
+        self.assertEqual(trade_plan[0]['currency'], 'ETH')
+        self.assertEqual(float(trade_plan[0]['value_usdc']), 200.0)
+        self.assertEqual(trade_plan[1]['action'], 'BUY')
+        self.assertEqual(trade_plan[1]['currency'], 'SOL')
+        self.assertEqual(float(trade_plan[1]['value_usdc']), 200.0)
+
+    def test_three_buy_candidates_only_two_selected(self):
+        """Test that only the first 2 BUY candidates are used when 3+ are available."""
+        # Create portfolio with 600 USDC
+        portfolio = [
+            {'currency': 'USDC', 'balance': 600.0, 'current_rate_usdc': 1.0, 
+             'current_value_usdc': 600.0, 'previous_rate_usdc': 1.0,
+             'percentage_change': 0.0, 'value_change_usdc': 0.0}
+        ]
+        self._create_portfolio_summary(portfolio)
+        
+        # Create 3 BUY recommendations
+        recommendations = [
+            {'currency': 'ETH', 'percentage_change': '0.00', 'ta_score': 3, 'signal': 'BUY'},
+            {'currency': 'SOL', 'percentage_change': '0.00', 'ta_score': 2, 'signal': 'BUY'},
+            {'currency': 'BNB', 'percentage_change': '0.00', 'ta_score': 1, 'signal': 'BUY'}
+        ]
+        self._create_recommendations(recommendations)
+        
+        # Generate trade plan
+        creator = CreateTradePlan(self.cfg)
+        success = creator.run()
+        
+        self.assertTrue(success)
+        
+        # Only first 2 BUY candidates selected: ETH and SOL, 300 each
+        trade_plan = self._read_trade_plan()
+        self.assertEqual(len(trade_plan), 2)
+        buys = [t for t in trade_plan if t['action'] == 'BUY']
+        self.assertEqual(len(buys), 2)
+        self.assertEqual(buys[0]['currency'], 'ETH')
+        self.assertEqual(buys[1]['currency'], 'SOL')
+        self.assertEqual(float(buys[0]['value_usdc']), 300.0)
+        self.assertEqual(float(buys[1]['value_usdc']), 300.0)
 
 
 if __name__ == '__main__':

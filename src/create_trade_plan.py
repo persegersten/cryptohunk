@@ -8,7 +8,8 @@ This module:
 3. Generates trade plan based on rules:
    - Process SELL recommendations first: if value in USDC > TRADE_THRESHOLD, sell entire holding
    - Calculate liquid funds after SELLs
-   - Process BUY recommendations: if liquid funds > TRADE_THRESHOLD, execute ONE BUY with all funds
+   - Process BUY recommendations: if liquid funds > TRADE_THRESHOLD, execute up to 2 BUYs
+     with equal allocation. Falls back to 1 BUY if split amounts are below threshold.
 4. Saves trade plan to DATA_AREA_ROOT_DIR/output/rebalance/trade_plan.csv
 """
 import logging
@@ -170,18 +171,47 @@ class CreateTradePlan:
             buy_recommendations = recommendations_df[recommendations_df['signal'] == 'BUY']
             
             if not buy_recommendations.empty:
-                # Take first BUY recommendation (already sorted by priority in recommendations.csv)
-                first_buy = buy_recommendations.iloc[0]
-                currency = first_buy['currency']
+                # Take up to 2 BUY candidates (already sorted by priority in recommendations.csv)
+                buy_candidates = buy_recommendations.head(2)
                 
-                trade = {
-                    'action': 'BUY',
-                    'currency': currency,
-                    'amount': 'ALL',  # Buy for all liquid funds
-                    'value_usdc': f"{liquid_funds:.2f}"
-                }
-                trade_plan.append(trade)
-                log.info(f"BUY: {currency} with all liquid funds ({liquid_funds:.2f} USDC)")
+                if len(buy_candidates) == 1:
+                    # Single BUY candidate: use all liquid funds
+                    currency = buy_candidates.iloc[0]['currency']
+                    trade = {
+                        'action': 'BUY',
+                        'currency': currency,
+                        'amount': 'ALL',  # Buy for all liquid funds
+                        'value_usdc': f"{liquid_funds:.2f}"
+                    }
+                    trade_plan.append(trade)
+                    log.info(f"BUY: {currency} with all liquid funds ({liquid_funds:.2f} USDC)")
+                else:
+                    # 2 BUY candidates: try equal split
+                    allocation = liquid_funds / 2
+                    
+                    if allocation > self.cfg.trade_threshold:
+                        # Both allocations exceed threshold, create 2 BUYs
+                        for i in range(2):
+                            currency = buy_candidates.iloc[i]['currency']
+                            trade = {
+                                'action': 'BUY',
+                                'currency': currency,
+                                'amount': f"{allocation:.2f}",
+                                'value_usdc': f"{allocation:.2f}"
+                            }
+                            trade_plan.append(trade)
+                            log.info(f"BUY: {currency} with {allocation:.2f} USDC (split 1/2)")
+                    else:
+                        # Split too small, fallback to single BUY with all liquid funds
+                        currency = buy_candidates.iloc[0]['currency']
+                        trade = {
+                            'action': 'BUY',
+                            'currency': currency,
+                            'amount': 'ALL',  # Buy for all liquid funds
+                            'value_usdc': f"{liquid_funds:.2f}"
+                        }
+                        trade_plan.append(trade)
+                        log.info(f"BUY: {currency} with all liquid funds ({liquid_funds:.2f} USDC) (split below threshold, fallback to single BUY)")
             else:
                 log.info("No BUY recommendations available")
         else:

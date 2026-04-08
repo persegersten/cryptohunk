@@ -244,7 +244,9 @@ class ExecuteTradePlan:
         
         try:
             if action == 'BUY':
-                # For BUY, amount is 'ALL' meaning use all liquid funds
+                # For BUY, value_usdc determines the purchase amount.
+                # amount is 'ALL' for a single BUY using all liquid funds,
+                # or the allocated USDC value when splitting across multiple BUYs.
                 log.info(f"Executing BUY: {currency} with {value_usdc} USDC")
                 self.broker.market_buy(symbol, value_usdc)
                 log.info(f"Successfully executed BUY: {currency}")
