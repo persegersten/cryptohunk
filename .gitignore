@@ -1,6 +1,6 @@
-*.csv
+#*.csv
 *.swp
-*.json
+#*.json
 local_analyse.sh
 local_run.sh
 portfolio.json
