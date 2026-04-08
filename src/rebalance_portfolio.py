@@ -183,7 +183,8 @@ class RebalancePortfolio:
             if macd_prev <= macd_signal_prev and macd > macd_signal:
                 score += 1
 
-        # RSI zone (+1 constructive, -1 weak or overheated)
+        # RSI zone: 50-65 = constructive uptrend zone (+1),
+        #           < 45 = weak momentum (-1), > 70 = overbought risk (-1)
         if rsi is not None:
             if 50 <= rsi <= 65:
                 score += 1
