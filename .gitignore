@@ -5,11 +5,7 @@ local_analyse.sh
 local_run.sh
 portfolio.json
 secrets.json
-history/
-output/
-trades/
 tmp/
-downloaded_originals/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
