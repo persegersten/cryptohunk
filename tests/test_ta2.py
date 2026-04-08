@@ -236,6 +236,7 @@ class TestTA2OverrideRules(unittest.TestCase):
             ta_score=0,  # TA2 HOLD
             current_value_usdc=50.0,   # < 100 threshold
             percentage_change=5.0,     # > 3% profit
+            macd_sell=False,
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 1)
@@ -244,20 +245,22 @@ class TestTA2OverrideRules(unittest.TestCase):
         """Rule 2: holdings >= threshold AND loss > stop_loss_pct → SELL even if TA2 says BUY."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
-            ta_score=1,   # TA2 BUY
+            ta_score=6,   # TA2 BUY (score >= threshold)
             current_value_usdc=500.0,  # >= 100 threshold
             percentage_change=-4.0,    # > 3% loss
+            macd_sell=False,
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 2)
 
     def test_rule3_prevents_sell_on_small_holdings(self):
-        """Rule 3: holdings < threshold → HOLD instead of SELL (even if TA2 says SELL)."""
+        """Rule 3: holdings < threshold → HOLD instead of SELL (even if MACD says SELL)."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-1,  # TA2 SELL
+            ta_score=-4,  # Bearish TA
             current_value_usdc=50.0,   # < 100 threshold
             percentage_change=2.0,     # < 3% profit
+            macd_sell=True,  # MACD exit rule triggered
         )
         self.assertEqual(signal, "HOLD")
         self.assertEqual(priority, 3)
@@ -266,9 +269,10 @@ class TestTA2OverrideRules(unittest.TestCase):
         """TA2 SELL is allowed when holdings >= threshold (no overriding rule)."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-1,  # TA2 SELL
+            ta_score=-4,  # Bearish TA
             current_value_usdc=500.0,  # >= 100 threshold
             percentage_change=2.0,     # < 3% take_profit, so TA signal applies
+            macd_sell=True,  # MACD exit rule triggered
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 3)
@@ -277,9 +281,10 @@ class TestTA2OverrideRules(unittest.TestCase):
         """TA2 BUY passes through when no override rule applies."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
-            ta_score=1,   # TA2 BUY
+            ta_score=6,   # TA2 BUY (score >= threshold)
             current_value_usdc=500.0,
             percentage_change=2.0,     # < 3% take_profit, so TA signal applies
+            macd_sell=False,
         )
         self.assertEqual(signal, "BUY")
         self.assertEqual(priority, 3)
@@ -288,9 +293,10 @@ class TestTA2OverrideRules(unittest.TestCase):
         """Rule 1: profit > take_profit_pct → SELL even when holdings >= threshold."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
-            ta_score=1,   # TA2 BUY (would normally buy)
+            ta_score=6,   # TA2 BUY (would normally buy)
             current_value_usdc=500.0,  # >= 100 threshold
             percentage_change=5.0,     # > 3% take_profit
+            macd_sell=False,
         )
         self.assertEqual(signal, "SELL")
         self.assertEqual(priority, 1)
