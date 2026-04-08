@@ -77,12 +77,13 @@ class TestRebalancePortfolio(unittest.TestCase):
     def _create_ta_file(self, currency: str, rsi: float, ema_12: float, ema_26: float,
                         macd: float, macd_signal: float, close: float, ema_200: float,
                         ema_21: float = None, ema_50: float = None, n_rows: int = 20,
-                        rsi_prev: float = None, rsi_lookback_min: float = None):
+                        rsi_prev: float = None, rsi_lookback_min: float = None,
+                        macd_prev: float = None, macd_signal_prev: float = None):
         """Create a TA CSV file for testing.
 
-        Creates enough rows for the TA2 strategy (LOOKBACK=12, so at least 13 rows).
-        When rsi_prev/rsi_lookback_min are provided, they are used to construct
-        a RSI series that satisfies (or not) the TA2 entry conditions.
+        Creates enough rows for the TA2 strategy (at least 2 rows needed).
+        When macd_prev/macd_signal_prev are provided, they set the MACD values
+        at t-1 to control the bullish MACD cross condition.
         """
         ta_file = self.ta_dir / f"{currency}_ta.csv"
 
@@ -90,24 +91,16 @@ class TestRebalancePortfolio(unittest.TestCase):
             ema_21 = close - 100  # default: close > ema_21
         if ema_50 is None:
             ema_50 = ema_200 + 500
-        if rsi_prev is None:
-            rsi_prev = 48.0  # default: satisfies RSI cross (<=50)
-        if rsi_lookback_min is None:
-            rsi_lookback_min = 40.0  # default: satisfies pullback reset (<50)
-
-        # Build RSI series with proper lookback window for TA2
-        rsi_values = [55.0] * n_rows
-        # Set lookback window values (indices n_rows-14 to n_rows-2)
-        for i in range(max(0, n_rows - 13), n_rows - 1):
-            rsi_values[i] = rsi_lookback_min
-        rsi_values[-2] = rsi_prev  # t-1
-        rsi_values[-1] = rsi  # t
+        if macd_prev is None:
+            macd_prev = macd_signal - 1  # default: satisfies MACD cross (prev <= signal)
+        if macd_signal_prev is None:
+            macd_signal_prev = macd_signal  # default: same signal at t-1
 
         data = {
             'Open_Time_ms': [1000000 + i * 3600000 for i in range(n_rows)],
             'Close_Time_ms': [1000000 + i * 3600000 + 3599999 for i in range(n_rows)],
             'Close': [close] * n_rows,
-            'RSI_14': rsi_values,
+            'RSI_14': [rsi] * n_rows,
             'EMA_12': [ema_12] * n_rows,
             'EMA_21': [ema_21] * n_rows,
             'EMA_26': [ema_26] * n_rows,
@@ -118,6 +111,10 @@ class TestRebalancePortfolio(unittest.TestCase):
             'MACD_Histogram': [macd - macd_signal] * n_rows,
         }
         df = pd.DataFrame(data)
+        # Set previous candle MACD values for cross detection
+        df.loc[df.index[-2], 'MACD'] = macd_prev
+        df.loc[df.index[-2], 'MACD_Signal'] = macd_signal_prev
+        df.loc[df.index[-2], 'MACD_Histogram'] = macd_prev - macd_signal_prev
         df.to_csv(ta_file, index=False)
 
     def _create_portfolio_summary(self, portfolio_data: list):
@@ -355,13 +352,13 @@ class TestRebalancePortfolio(unittest.TestCase):
     def test_full_pipeline_with_recommendations(self):
         """Test full rebalancing pipeline with TA2 strategy."""
         # Create TA files that satisfy TA2 conditions
-        # BTC: BUY signal (all TA2 conditions met: Close > EMA_200, MACD > Signal,
-        #       Close > EMA_21, RSI crosses 50 from below, lookback has RSI < 50)
+        # BTC: BUY signal (all TA2 conditions met: Close > EMA_200, MACD cross,
+        #       Close > EMA_21)
         self._create_ta_file(
             currency="BTC",
             rsi=52.0, ema_12=50100.0, ema_26=50000.0,
             macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0,
-            ema_21=50500.0, rsi_prev=48.0, rsi_lookback_min=40.0
+            ema_21=50500.0
         )  # BUY signal (ta_score = 1)
         
         # ETH: BUY signal (same conditions met)
@@ -369,7 +366,7 @@ class TestRebalancePortfolio(unittest.TestCase):
             currency="ETH",
             rsi=52.0, ema_12=3100.0, ema_26=3050.0,
             macd=5.0, macd_signal=3.0, close=3150.0, ema_200=3000.0,
-            ema_21=3100.0, rsi_prev=48.0, rsi_lookback_min=40.0
+            ema_21=3100.0
         )  # BUY signal (ta_score = 1)
         
         # SOL: SELL signal (MACD < MACD_Signal)
@@ -485,7 +482,7 @@ class TestRebalancePortfolio(unittest.TestCase):
                 currency=currency,
                 rsi=52.0, ema_12=50100.0, ema_26=50000.0,
                 macd=10.0, macd_signal=5.0, close=51000.0, ema_200=50000.0,
-                ema_21=50500.0, rsi_prev=48.0, rsi_lookback_min=40.0
+                ema_21=50500.0
             )  # BUY signal (TA2 conditions met)
         
         # Create portfolio summary with one currency having no holdings

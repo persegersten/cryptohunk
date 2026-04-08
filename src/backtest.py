@@ -6,7 +6,7 @@ Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>_history.csv,
 beräknar tekniska indikatorer och simulerar signaler över hela den tillgängliga
 historiken.
 
-Använder long-only trend-following pullback-strategin (TA2).
+Använder long-only MACD-cross trend-following strategin (TA2).
 
 TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) som används i live-
 rebalansering tillämpas INTE, för att ge en rättvisande bild av strategin i sig.
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 # Minsta antal ljus innan simuleringen börjar, för att EMA_200 ska ha stabiliserats.
-# TA2-algoritmen kräver minst 9 rader (LOOKBACK+1), men 200 ger meningsfull EMA_200.
+# TA2-algoritmen kräver minst 2 rader, men 200 ger meningsfull EMA_200.
 MIN_CANDLES_FOR_TA = 200
 
 
@@ -119,7 +119,7 @@ class Backtest:
         """
         records: List[Dict] = []
 
-        start_idx = max(MIN_CANDLES_FOR_TA, 9)  # EMA_200-stabilitet och TA2-LOOKBACK
+        start_idx = max(MIN_CANDLES_FOR_TA, 2)  # EMA_200-stabilitet och TA2 kräver minst 2 rader
 
         if len(ta_df) <= start_idx:
             log.warning(

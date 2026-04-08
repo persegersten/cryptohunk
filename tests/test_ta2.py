@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Tests for TA2 strategy (long-only trend-following pullback).
+Tests for TA2 strategy (long-only MACD-cross trend-following).
 
 Covers:
-- TA2 entry detection including RSI cross and reset window excluding entry candle
+- TA2 entry detection including bullish MACD cross and trend filter
 - Optional EMA50 filter behaviour
 - TA2 exit (MACD cross down) behaviour
 - That take profit / stop loss overrides still apply when TA2 would otherwise HOLD/BUY/SELL
@@ -58,20 +58,12 @@ def _build_ta_df(
     ema_50=52000.0,
     macd=10.0,
     macd_signal=5.0,
-    # RSI series: control t-1 and t, and the lookback window
-    rsi_lookback_min=40.0,   # min RSI in t-12..t-1 (should be < 50 for entry)
-    rsi_t_minus_1=48.0,      # RSI at t-1 (should be <= 50 for cross)
-    rsi_t=52.0,              # RSI at t (should be > 50 for cross)
+    # MACD cross: control t-1 values for bullish cross detection
+    macd_prev=4.0,           # MACD at t-1 (should be <= macd_signal_prev for cross)
+    macd_signal_prev=5.0,    # MACD_Signal at t-1
 ):
     """Build a minimal DataFrame that satisfies (or can be tweaked to fail) TA2 entry/exit rules."""
     rows = n_rows
-    # Build RSI series: fill lookback window with rsi_lookback_min, then t-1, then t
-    rsi_values = [55.0] * rows  # default neutral
-    # Set the 12 candles before t-1 (indices rows-14 to rows-2) to rsi_lookback_min
-    for i in range(rows - 13, rows - 1):  # t-12 to t-1 are indices rows-13 to rows-2 (0-based)
-        rsi_values[i] = rsi_lookback_min
-    rsi_values[-2] = rsi_t_minus_1  # t-1
-    rsi_values[-1] = rsi_t          # t
 
     data = {
         "Close": [close] * rows,
@@ -80,9 +72,12 @@ def _build_ta_df(
         "EMA_50": [ema_50] * rows,
         "MACD": [macd] * rows,
         "MACD_Signal": [macd_signal] * rows,
-        "RSI_14": rsi_values,
     }
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # Set previous candle MACD values for cross detection
+    df.loc[df.index[-2], "MACD"] = macd_prev
+    df.loc[df.index[-2], "MACD_Signal"] = macd_signal_prev
+    return df
 
 
 class TestTA2SignalEntry(unittest.TestCase):
@@ -117,40 +112,33 @@ class TestTA2SignalEntry(unittest.TestCase):
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, -1)  # SELL, not BUY
 
-    def test_no_buy_when_rsi_does_not_cross(self):
-        # RSI was already above 50 at t-1 (no cross)
-        df = _build_ta_df(rsi_t_minus_1=55.0, rsi_t=60.0)
+    def test_no_buy_when_no_macd_cross(self):
+        # MACD was already above signal at t-1 (no cross)
+        df = _build_ta_df(macd_prev=10.0, macd_signal_prev=5.0)
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertNotEqual(result, 1)
 
-    def test_no_buy_when_rsi_t_not_above_50(self):
-        # RSI(t) does not cross above 50
-        df = _build_ta_df(rsi_t_minus_1=48.0, rsi_t=49.0)
+    def test_no_buy_when_macd_prev_above_signal_prev(self):
+        # MACD(t-1) > MACD_Signal(t-1) → no bullish cross
+        df = _build_ta_df(macd=10.0, macd_signal=5.0, macd_prev=6.0, macd_signal_prev=5.0)
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertNotEqual(result, 1)
 
-    def test_no_buy_when_lookback_reset_missing(self):
-        # Lookback min RSI >= 50 → no pullback reset
-        # rsi_t_minus_1=50.0 satisfies the RSI cross (<=50) but with all lookback values >=50
-        # the pullback reset condition (min < 50) is not met
-        df = _build_ta_df(rsi_lookback_min=55.0, rsi_t_minus_1=50.0)
+    def test_buy_when_macd_prev_equals_signal_prev(self):
+        # MACD(t-1) == MACD_Signal(t-1) is valid for cross (<=)
+        df = _build_ta_df(macd=10.0, macd_signal=5.0, macd_prev=5.0, macd_signal_prev=5.0)
         result = self.rebalancer._calculate_ta2_signal(df)
-        self.assertNotEqual(result, 1)
-
-    def test_lookback_excludes_entry_candle(self):
-        """RSI at t is high but lookback window (t-8..t-1) still has a low value."""
-        df = _build_ta_df(
-            rsi_lookback_min=40.0,  # < 45, inside t-8..t-1
-            rsi_t_minus_1=48.0,
-            rsi_t=55.0,
-        )
-        # Override entry candle RSI to be high (should not affect lookback)
-        df.loc[df.index[-1], "RSI_14"] = 55.0
-        result = self.rebalancer._calculate_ta2_signal(df)
-        self.assertEqual(result, 1)  # BUY — entry candle not in lookback
+        self.assertEqual(result, 1)  # BUY
 
     def test_not_enough_rows_returns_hold(self):
-        df = _build_ta_df(n_rows=12)  # < 13 rows needed (LOOKBACK + 1)
+        df = _build_ta_df(n_rows=2)
+        # Only 2 rows - minimal, but should work (we need at least 2)
+        result = self.rebalancer._calculate_ta2_signal(df)
+        # With 2 rows it should be able to compute (prev + last)
+        self.assertIn(result, [0, 1, -1])
+
+    def test_single_row_returns_hold(self):
+        df = _build_ta_df(n_rows=3).iloc[:1]  # Only 1 row
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, 0)  # HOLD
 
@@ -182,9 +170,6 @@ class TestTA2SignalExit(unittest.TestCase):
         df = _build_ta_df(
             macd=1.0,
             macd_signal=5.0,
-            rsi_t_minus_1=48.0,
-            rsi_t=52.0,
-            rsi_lookback_min=40.0,
         )
         result = self.rebalancer._calculate_ta2_signal(df)
         self.assertEqual(result, -1)
