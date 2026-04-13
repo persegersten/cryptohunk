@@ -1056,9 +1056,9 @@ class VisualizeHistory:
         has_portfolio = "Performance" in charts
         has_summary = "Overview" in charts
         all_keys = (
-            currency_keys
+            (["Overview"] if has_summary else [])
             + (["Performance"] if has_portfolio else [])
-            + (["Overview"] if has_summary else [])
+            + currency_keys
         )
 
         def _tab_button(c: str, active: bool) -> str:
