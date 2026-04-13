@@ -6,10 +6,11 @@ Läser historisk data från DATA_AREA_ROOT_DIR/history/<currency>_history.csv,
 beräknar tekniska indikatorer och simulerar signaler över hela den tillgängliga
 historiken.
 
-Använder long-only MACD-cross trend-following strategin (TA2).
-
-TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) som används i live-
-rebalansering tillämpas INTE, för att ge en rättvisande bild av strategin i sig.
+Använder samma graderade ta_score-algoritm som live-rebalanseringen
+(RebalancePortfolio._calculate_ta_score + _extract_signal_context) för att
+garantera att backtestresultaten exakt speglar de signaler som genereras i
+driftläge.  Ren TA-signal utan portfölj-regler (take-profit, stop-loss,
+min-innehav) tillämpas, för att ge en rättvisande bild av strategin i sig.
 
 Resultaten sparas som en fil per valuta i
 DATA_AREA_ROOT_DIR/output/backtesting/<CURRENCY>_backtesting.csv.
@@ -17,7 +18,7 @@ DATA_AREA_ROOT_DIR/output/backtesting/<CURRENCY>_backtesting.csv.
 Varje rad i resultatet representerar ett ljus (candle) för en valuta och innehåller:
 - timestamp_ms: tidsstämpel (Close_Time_ms eller Open_Time_ms)
 - currency: valutasymbol
-- ta_signal: rå signal (-1=SÄLJA, 0=HÅLLA, 1=KÖPA)
+- ta_signal: graderad TA-poäng (ca −8 till +8, ≥5 = KÖP)
 - signal: rekommenderad åtgärd (BUY/SELL/HOLD)
 """
 from __future__ import annotations
@@ -110,8 +111,12 @@ class Backtest:
         Simulera backtesting för en valuta steg för steg.
 
         För varje ljus (candle) från MIN_CANDLES_FOR_TA:
-        1. Beräkna TA2-signal med data upp till och inklusive detta ljus.
-        2. Mappa råa signalen direkt (BUY/SELL/HOLD).
+        1. Beräkna graderad ta_score med data upp till och inklusive detta ljus
+           (samma _calculate_ta_score som live-rebalanseringen).
+        2. Bestäm ren TA-signal:
+           - SELL om MACD < Signal ELLER Close < EMA_21 (exit-regel)
+           - BUY om ta_score >= _BUY_THRESHOLD och inte blockerad av EMA50-filter
+           - HOLD annars
            TRADE_THRESHOLD-reglerna (take-profit, stop-loss, min-innehav) tillämpas
            INTE vid backtesting, för att ge en rättvisande bild av strategin.
 
@@ -119,7 +124,7 @@ class Backtest:
         """
         records: List[Dict] = []
 
-        start_idx = max(MIN_CANDLES_FOR_TA, 2)  # EMA_200-stabilitet och TA2 kräver minst 2 rader
+        start_idx = max(MIN_CANDLES_FOR_TA, 2)  # EMA_200-stabilitet och TA kräver minst 2 rader
 
         if len(ta_df) <= start_idx:
             log.warning(
@@ -130,19 +135,24 @@ class Backtest:
             )
             return records
 
+        buy_threshold = self._rebalancer._BUY_THRESHOLD
+
         for t in range(start_idx, len(ta_df)):
             # Fönster av TA-data upp till och inklusive tidpunkt t
             window = ta_df.iloc[: t + 1]
             last = window.iloc[-1]
 
-            # Beräkna TA2-signal
-            ta_signal = self._rebalancer._calculate_ta2_signal(window)
+            # Beräkna graderad ta_score (samma algoritm som live)
+            ta_score = self._rebalancer._calculate_ta_score(window)
 
-            # Mappa signalen direkt – TRADE_THRESHOLD-regler hoppas över
-            if ta_signal >= 1:
-                signal = "BUY"
-            elif ta_signal <= -1:
+            # Bestäm exit- och filterstatus (samma algoritm som live)
+            macd_sell, ema50_blocks_buy = self._rebalancer._extract_signal_context(window)
+
+            # Ren TA-signal utan portfölj-regler
+            if macd_sell:
                 signal = "SELL"
+            elif ta_score >= buy_threshold and not ema50_blocks_buy:
+                signal = "BUY"
             else:
                 signal = "HOLD"
 
@@ -161,7 +171,7 @@ class Backtest:
                 {
                     "timestamp_ms": timestamp_ms,
                     "currency": currency,
-                    "ta_signal": ta_signal,
+                    "ta_signal": ta_score,
                     "signal": signal,
                 }
             )
