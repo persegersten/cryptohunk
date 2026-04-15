@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export CURRENCIES="BNB,ETH,SOL"
+export CURRENCIES="BTC,ETH,SOL"
 export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
 export DATA_AREA_ROOT_DIR="/tmp/cryptohunk_data"
 export CURRENCY_HISTORY_PERIOD="1h"
