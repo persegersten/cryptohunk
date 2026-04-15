@@ -1077,9 +1077,10 @@ class VisualizeHistory:
             )
 
         tab_parts = [_tab_button(c, i == 0) for i, c in enumerate(all_keys)]
-        # Lägg in en separator före specialflikarna om det finns valutaflikar
+        # Lägg in en separator mellan specialflikarna och valutaflikarna
         if (has_portfolio or has_summary) and currency_keys:
-            tab_parts.insert(len(currency_keys), '<span class="vh-tab-sep"></span>')
+            num_special = (1 if has_summary else 0) + (1 if has_portfolio else 0)
+            tab_parts.insert(num_special, '<span class="vh-tab-sep"></span>')
         tabs_html = "\n".join(tab_parts)
 
         chart_sections = "\n".join(
