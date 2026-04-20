@@ -5,11 +5,13 @@ Kör först AssertEnv (steg 1) för att ladda/validera konfiguration.
 Här anropas också CleanData (steg 2) och CollectData (steg 3) när flaggor anges.
 """
 import sys
+import csv
 import argparse
+from pathlib import Path
 
 from .assert_env import assert_env_and_report
 from .clean_data import clean_data_area
-from .collect_data import collect_all as collect_data_all
+from .collect_data import collect_all as collect_data_all, CollectData
 from .validate_collected_data import validate_collected_data
 from .summarize_portfolio import summarize_portfolio_main
 from .technical_analysis import technical_analysis_main
@@ -126,6 +128,19 @@ def main():
     if args.execute_trades:
         print("Utför handel (ExecuteTradePlan)...")
         execute_trade_plan_main(cfg)
+
+    # Om handel utfördes och visualisering ska köras: ladda ner färsk
+    # trades.json från Binance så att senaste handeln syns i diagrammet.
+    if args.execute_trades and args.visualize:
+        trade_plan_file = Path(cfg.data_area_root_dir) / "output" / "rebalance" / "trade_plan.csv"
+        has_trades = False
+        if trade_plan_file.exists():
+            with open(trade_plan_file, "r", encoding="utf-8") as f:
+                rows = list(csv.reader(f))
+                has_trades = len(rows) > 1  # header + at least one trade
+        if has_trades:
+            print("Laddar ner färsk trades.json från Binance (för visualisering)...")
+            CollectData(cfg).collect_trade_history()
 
     if args.backtest:
         print("Startar historisk simulering (Backtest)...")
