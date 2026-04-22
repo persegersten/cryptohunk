@@ -326,14 +326,15 @@ class RebalancePortfolio:
         Generate BUY/SELL/HOLD signal based on continuous TA score and portfolio rules.
 
         Signal is derived from the graded ta_score and the explicit exit rules:
-        - SELL when MACD < MACD_Signal OR Close < EMA_21 (exit rule)
+        - SELL when MACD < MACD_Signal OR Close < EMA_21 (exit rule, only for significant holdings)
         - BUY when ta_score >= _BUY_THRESHOLD and not blocked by EMA50 filter
         - HOLD otherwise
 
         Portfolio override rules (applied first):
         - Rule 1: If profit > take_profit_percentage: SELL (highest priority, overrides TA)
         - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL
-        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1)
+        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1);
+                  BUY is still evaluated so currencies without holdings can generate entry signals
 
         Args:
             currency: Currency symbol
@@ -363,16 +364,16 @@ class RebalancePortfolio:
             # Rule 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
             if macd_sell:
                 log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite TA exit, ta_score={ta_score})")
-                return "HOLD", 3
+                # Do not return here - still allow BUY signal to be evaluated below
         else:
             # Rule 2: If holdings >= TRADE_THRESHOLD and loss > stop_loss_percentage, force SELL (high priority)
             if percentage_change < -stop_loss_pct:
                 log.info(f"{currency}: Loss > {stop_loss_pct}% -> SELL (Rule 2 stop loss)")
                 return "SELL", 2
 
-        # Exit rule: MACD bearish OR Close < EMA_21 → SELL
-        if macd_sell:
-            return "SELL", 3
+            # Exit rule: MACD bearish OR Close < EMA_21 → SELL (only when holding significant amount)
+            if macd_sell:
+                return "SELL", 3
 
         # BUY if score indicates strong bullish setup and not blocked by EMA50 filter
         if ta_score >= self._BUY_THRESHOLD and not ema50_blocks_buy:
