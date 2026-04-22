@@ -215,17 +215,53 @@ class TestRebalancePortfolio(unittest.TestCase):
         """Test Rule 3: holdings < TRADE_THRESHOLD -> no SELL (even if MACD says sell)."""
         rebalancer = RebalancePortfolio(self.cfg)
         
-        # Holdings < 100 USDC and profit < 10%
+        # Holdings < 100 USDC, bearish TA, profit < 10%
         signal, priority = rebalancer._generate_signal(
             currency="BTC",
-            ta_score=-4,  # Bearish TA
+            ta_score=-4,  # Bearish TA (below BUY_THRESHOLD)
             current_value_usdc=50.0,  # < 100 USDC threshold
             percentage_change=5.0,    # < 10% profit
             macd_sell=True  # MACD exit rule triggered
         )
         
-        self.assertEqual(signal, "HOLD")  # Should prevent SELL (Rule 3)
+        self.assertEqual(signal, "HOLD")  # Should prevent SELL (Rule 3); ta_score too low to BUY
         self.assertEqual(priority, 3)  # TA-based priority
+
+    def test_buy_allowed_below_threshold_despite_macd_sell(self):
+        """Test Rule 3 fix: no holdings + macd_sell=True but strong ta_score -> BUY (not HOLD).
+
+        When a currency has no holdings and macd_sell is triggered via ema21_exit
+        (Close < EMA_21 while MACD is still bullish), the graded ta_score can still
+        reach >= BUY_THRESHOLD. Rule 3 must only prevent SELL, not block BUY.
+        """
+        rebalancer = RebalancePortfolio(self.cfg)
+        
+        # No holdings, strong bullish ta_score, but macd_sell=True (e.g. Close < EMA_21)
+        signal, priority = rebalancer._generate_signal(
+            currency="ETH",
+            ta_score=6,    # Score >= BUY_THRESHOLD (5)
+            current_value_usdc=0.0,   # No holdings
+            percentage_change=0.0,
+            macd_sell=True  # Triggered via Close < EMA_21, even though MACD is bullish
+        )
+        
+        self.assertEqual(signal, "BUY")   # Should generate BUY despite macd_sell (Rule 3 allows it)
+        self.assertEqual(priority, 3)
+
+    def test_hold_below_threshold_macd_sell_score_too_low(self):
+        """Test no holdings + macd_sell=True + ta_score below BUY_THRESHOLD -> HOLD."""
+        rebalancer = RebalancePortfolio(self.cfg)
+        
+        signal, priority = rebalancer._generate_signal(
+            currency="SOL",
+            ta_score=3,    # Below BUY_THRESHOLD (5)
+            current_value_usdc=0.0,
+            percentage_change=0.0,
+            macd_sell=True
+        )
+        
+        self.assertEqual(signal, "HOLD")
+        self.assertEqual(priority, 3)
 
     def test_sell_allowed_above_threshold(self):
         """Test that SELL is allowed when holdings >= TRADE_THRESHOLD and MACD says sell."""
