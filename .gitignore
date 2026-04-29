@@ -6,6 +6,7 @@ local_run.sh
 portfolio.json
 secrets.json
 tmp/
+.codex
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
