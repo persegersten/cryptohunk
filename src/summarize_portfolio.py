@@ -174,9 +174,11 @@ def summarize_portfolio(cfg: Config) -> None:
     # Prepare summary data
     summary_rows = []
     
-    # Process all currencies including quote assets (e.g., USDC, USDT)
-    # Use set to avoid duplicates if a currency appears in both lists
-    all_currencies = list(set(list(cfg.currencies) + list(cfg.allowed_quote_assets)))
+    # Process configured base currencies plus the USDC cash row. Other quote
+    # assets (for example USDT) are not useful in this USDC-denominated summary.
+    quote_assets = {asset.upper() for asset in cfg.allowed_quote_assets}
+    base_currencies = {currency.upper() for currency in cfg.currencies if currency.upper() not in quote_assets}
+    all_currencies = sorted(base_currencies | {"USDC"})
     
     for currency in all_currencies:
         currency_upper = currency.upper()
