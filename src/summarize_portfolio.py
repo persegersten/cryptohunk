@@ -150,7 +150,7 @@ def summarize_portfolio(cfg: Config) -> None:
     Args:
         cfg: Configuration object
     """
-    log.info("=== Startar SummarizePortfolio ===")
+    log.info("=== Starting SummarizePortfolio ===")
     
     # Ensure summarised directory exists
     summarised_dir = Path(cfg.data_area_root_dir) / "summarised"
@@ -249,7 +249,7 @@ def summarize_portfolio(cfg: Config) -> None:
         log.error(f"Failed to write CSV: {e}")
         raise
     
-    log.info("=== SummarizePortfolio avslutad ===")
+    log.info("=== SummarizePortfolio completed ===")
 
 
 # Module-level convenience function

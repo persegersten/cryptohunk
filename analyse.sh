@@ -14,6 +14,6 @@ set -euo pipefail
 
 PYTHON=${PYTHON:-python3}
 
-echo "Kör AssertEnv och main..."
+echo "Running AssertEnv and main..."
 # Disabled, run in run.sh instead
 # $PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --backtest --visualize --ftp-upload

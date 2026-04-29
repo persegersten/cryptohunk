@@ -28,64 +28,64 @@ def main():
     parser.add_argument(
         "--dump-config",
         action="store_true",
-        help="Skriv ut parsad konfiguration (ej hemliga värden)",
+        help="Print parsed configuration (excluding secret values)",
     )
     parser.add_argument(
         "--clean-data",
         action="store_true",
-        help="Töm DATA_AREA_ROOT_DIR innan vidare körning",
+        help="Empty DATA_AREA_ROOT_DIR before continuing",
     )
     parser.add_argument(
         "--collect-data",
         action="store_true",
-        help="Hämta historik, portfolio och trade-historik",
+        help="Fetch history, portfolio, and trade history",
     )
     parser.add_argument(
         "--run-ta",
         action="store_true",
-        help="Kör teknisk analys på historisk data",
+        help="Run technical analysis on historical data",
     )
     parser.add_argument(
         "--rebalance-portfolio",
         action="store_true",
-        help="Generera köp/säljrekommendationer baserat på TA-signaler och innehav",
+        help="Generate buy/sell recommendations based on TA signals and holdings",
     )
     parser.add_argument(
         "--create-trade-plan",
         action="store_true",
-        help="Skapa handelsplan baserat på portfölj och rekommendationer",
+        help="Create a trade plan based on portfolio and recommendations",
     )
     parser.add_argument(
         "--execute-trades",
         action="store_true",
-        help="Utför handel mot Binance enligt handelsplan",
+        help="Execute trades on Binance according to the trade plan",
     )
     parser.add_argument(
         "--visualize",
         action="store_true",
-        help="Generera interaktivt kurshistorikdiagram med köp/säljmarkeringar",
+        help="Generate an interactive price history chart with buy/sell markers",
     )
     parser.add_argument(
         "--ftp-upload",
         action="store_true",
-        help="Ladda upp HTML-filer som matchar FTP_HTML_REGEXP via FTP",
+        help="Upload HTML files matching FTP_HTML_REGEXP via FTP",
     )
     parser.add_argument(
         "--backtest",
         action="store_true",
-        help="Kör historisk simulering (backtesting) med TA2 och rebalansering på nedladdad historikdata",
+        help="Run historical simulation (backtesting) with TA2 and rebalancing on downloaded history data",
     )
     args = parser.parse_args()
 
     try:
         cfg = assert_env_and_report()
     except Exception as e:
-        print("Fel vid validering av miljövariabler:", e, file=sys.stderr)
+        print("Error validating environment variables:", e, file=sys.stderr)
         sys.exit(2)
 
     if args.dump_config:
         # Endast icke-hemliga värden för översikt
-        print("\nKonfigurationsöversikt (säkra värden maskade):")
+        print("\nConfiguration overview (safe values masked):")
         print(f" CURRENCIES = {cfg.currencies}")
         print(f" BINANCE_BASE_URL = {cfg.binance_base_url}")
         print(f" DATA_AREA_ROOT_DIR = {cfg.data_area_root_dir}")
@@ -95,38 +95,38 @@ def main():
         print(f" DRY_RUN = {cfg.dry_run}")
 
     if args.clean_data:
-        print("Rensar data-arean...")
+        print("Cleaning data area...")
         try:
             clean_data_area(cfg)
-            print("Data-arean är rensad.")
+            print("Data area cleaned.")
         except Exception as e:
-            print(f"Fel vid rensning av data-arean: {e}", file=sys.stderr)
+            print(f"Error cleaning data area: {e}", file=sys.stderr)
             sys.exit(3)
 
     if args.collect_data:
-        print("Startar insamling av data (CollectData)...")
+        print("Starting data collection (CollectData)...")
         collect_data_all(cfg)
 
-        print("Startar sammanställning av portfolio...")
+        print("Starting portfolio summary...")
         summarize_portfolio_main(cfg)
 
     if args.run_ta:
-        print("Startar teknisk analys (TechnicalAnalysis)...")
+        print("Starting technical analysis (TechnicalAnalysis)...")
         technical_analysis_main(cfg)
 
-        print("Startar validering av insamlad data...")
+        print("Starting collected data validation...")
         validate_collected_data(cfg)
 
     if args.rebalance_portfolio:
-        print("Startar rebalansering av portfölj (RebalancePortfolio)...")
+        print("Starting portfolio rebalancing (RebalancePortfolio)...")
         rebalance_portfolio_main(cfg)
 
     if args.create_trade_plan:
-        print("Skapar handelsplan (CreateTradePlan)...")
+        print("Creating trade plan (CreateTradePlan)...")
         create_trade_plan_main(cfg)
 
     if args.execute_trades:
-        print("Utför handel (ExecuteTradePlan)...")
+        print("Executing trades (ExecuteTradePlan)...")
         execute_trade_plan_main(cfg)
 
     # Om handel utfördes och visualisering ska köras: ladda ner färsk
@@ -139,22 +139,22 @@ def main():
                 rows = list(csv.reader(f))
                 has_trades = len(rows) > 1  # header + at least one trade
         if has_trades:
-            print("Laddar ner färsk trades.json från Binance (för visualisering)...")
+            print("Downloading fresh trades.json from Binance (for visualization)...")
             CollectData(cfg).collect_trade_history()
 
     if args.backtest:
-        print("Startar historisk simulering (Backtest)...")
+        print("Starting historical simulation (Backtest)...")
         backtest_main(cfg)
 
     if args.visualize:
-        print("Genererar kurshistorikdiagram (VisualizeHistory)...")
+        print("Generating price history chart (VisualizeHistory)...")
         visualize_history_main(cfg)
 
     if args.ftp_upload:
-        print("Laddar upp HTML-filer via FTP (FtpUpload)...")
+        print("Uploading HTML files via FTP (FtpUpload)...")
         ftp_upload_main(cfg)
 
-    print("\nKlar.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

@@ -49,15 +49,15 @@ class TechnicalAnalysis:
         csv_file = self.history_root / f"{currency}_history.csv"
 
         if not csv_file.exists():
-            log.error("Historikfil saknas för %s: %s", currency, csv_file)
+            log.error("History file missing for %s: %s", currency, csv_file)
             return None
 
         try:
             df = pd.read_csv(csv_file)
-            log.info("Läste historik för %s: %d rader", currency, len(df))
+            log.info("Read history for %s: %d rows", currency, len(df))
             return df
         except Exception as e:
-            log.error("Fel vid läsning av historikfil för %s: %s", currency, e)
+            log.error("Error reading history file for %s: %s", currency, e)
             return None
 
     def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
@@ -125,7 +125,7 @@ class TechnicalAnalysis:
 
         # Kontrollera att Close-kolumnen finns
         if "Close" not in df.columns:
-            log.error("Close-kolumn saknas i historikfilen för %s", currency)
+            log.error("Close column missing in history file for %s", currency)
             return None
 
         # Skapa resultat-DataFrame
@@ -143,7 +143,7 @@ class TechnicalAnalysis:
         try:
             # Beräkna RSI (14 perioder)
             result_df["RSI_14"] = self._calculate_rsi(df["Close"], period=14)
-            log.info("Beräknade RSI(14) för %s", currency)
+            log.info("Calculated RSI(14) for %s", currency)
 
             # Beräkna EMAs
             result_df["EMA_12"] = self._calculate_ema(df["Close"], period=12)
@@ -151,19 +151,19 @@ class TechnicalAnalysis:
             result_df["EMA_26"] = self._calculate_ema(df["Close"], period=26)
             result_df["EMA_50"] = self._calculate_ema(df["Close"], period=50)
             result_df["EMA_200"] = self._calculate_ema(df["Close"], period=200)
-            log.info("Beräknade EMA(12, 21, 26, 50, 200) för %s", currency)
+            log.info("Calculated EMA(12, 21, 26, 50, 200) for %s", currency)
 
             # Beräkna MACD
             macd_line, signal_line, macd_histogram = self._calculate_macd(df["Close"])
             result_df["MACD"] = macd_line
             result_df["MACD_Signal"] = signal_line
             result_df["MACD_Histogram"] = macd_histogram
-            log.info("Beräknade MACD för %s", currency)
+            log.info("Calculated MACD for %s", currency)
 
             return result_df
 
         except Exception as e:
-            log.error("Fel vid beräkning av indikatorer för %s: %s", currency, e)
+            log.error("Error calculating indicators for %s: %s", currency, e)
             return None
 
     def save_ta_results(self, currency: str, ta_df: pd.DataFrame) -> bool:
@@ -183,10 +183,10 @@ class TechnicalAnalysis:
         
         try:
             ta_df.to_csv(csv_file, index=False)
-            log.info("Sparade TA-resultat för %s: %s", currency, csv_file)
+            log.info("Saved TA results for %s: %s", currency, csv_file)
             return True
         except Exception as e:
-            log.error("Fel vid sparande av TA-resultat för %s: %s", currency, e)
+            log.error("Error saving TA results for %s: %s", currency, e)
             return False
 
     def run(self) -> bool:
@@ -196,33 +196,33 @@ class TechnicalAnalysis:
         Returns:
             True om alla valutor processades framgångsrikt, annars False
         """
-        log.info("=== Startar TechnicalAnalysis ===")
-        log.info("Beräknar tekniska indikatorer för valutor: %s", self.cfg.currencies)
+        log.info("=== Starting TechnicalAnalysis ===")
+        log.info("Calculating technical indicators for currencies: %s", self.cfg.currencies)
 
         success_count = 0
         fail_count = 0
 
         for currency in self.cfg.currencies:
             try:
-                log.info("Processar %s...", currency)
+                log.info("Processing %s...", currency)
                 ta_df = self.calculate_indicators(currency)
                 
                 if ta_df is None or ta_df.empty:
-                    log.warning("Ingen data att spara för %s", currency)
+                    log.warning("No data to save for %s", currency)
                     fail_count += 1
                     continue
                 
                 if self.save_ta_results(currency, ta_df):
                     success_count += 1
-                    log.info("Framgångsrikt processad: %s", currency)
+                    log.info("Successfully processed: %s", currency)
                 else:
                     fail_count += 1
                     
             except Exception as e:
-                log.error("Oväntat fel vid processning av %s: %s", currency, e)
+                log.error("Unexpected error processing %s: %s", currency, e)
                 fail_count += 1
 
-        log.info("TechnicalAnalysis klar: %d lyckades, %d misslyckades", 
+        log.info("TechnicalAnalysis completed: %d succeeded, %d failed",
                  success_count, fail_count)
         
         return fail_count == 0
@@ -234,11 +234,11 @@ def technical_analysis_main(cfg: Config) -> None:
     Entrypoint för att köra teknisk analys från main.py eller andra moduler.
     Kastar SystemExit(1) vid fel.
     """
-    log.info("=== Startar TechnicalAnalysis ===")
+    log.info("=== Starting TechnicalAnalysis ===")
     ta = TechnicalAnalysis(cfg)
     success = ta.run()
     if not success:
-        log.error("TechnicalAnalysis misslyckades för en eller flera valutor")
+        log.error("TechnicalAnalysis failed for one or more currencies")
         raise SystemExit(1)
 
 
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     try:
         cfg = assert_env_and_report()
     except Exception as e:
-        log.error("Konfig kunde inte laddas: %s", e)
+        log.error("Config could not be loaded: %s", e)
         raise SystemExit(2)
 
     success = TechnicalAnalysis(cfg).run()
