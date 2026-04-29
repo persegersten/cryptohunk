@@ -25,6 +25,7 @@ $PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfo
 exit_code=${PIPESTATUS[0]}
 set -e
 
+echo "Uploading log file to FTP server..."
 curl --ftp-create-dirs -v \
   --user "$FTP_USERNAME:$FTP_PASSWORD" \
   --upload-file "$LOG_FILE" \
