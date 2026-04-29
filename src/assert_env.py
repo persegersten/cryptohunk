@@ -71,13 +71,13 @@ def load_config_from_env() -> Config:
 
     if missing:
         raise EnvironmentError(
-            "Följande miljövariabler saknas eller är tomma: " + ", ".join(missing)
+            "The following environment variables are missing or empty: " + ", ".join(missing)
         )
 
     # parse
     currencies = _parse_currencies(env.get("CURRENCIES", ""))
     if not currencies:
-        raise EnvironmentError("CURRENCIES måste innehålla minst en valuta.")
+        raise EnvironmentError("CURRENCIES must contain at least one currency.")
 
     binance_secret = env.get("BINANCE_SECRET", "").strip()
     binance_key = env.get("BINANCE_KEY", "").strip()
@@ -89,22 +89,22 @@ def load_config_from_env() -> Config:
     try:
         currency_history_nof_elements = int(env.get("CURRENCY_HISTORY_NOF_ELEMENTS", "0"))
     except ValueError:
-        raise EnvironmentError("CURRENCY_HISTORY_NOF_ELEMENTS måste vara ett heltal.")
+        raise EnvironmentError("CURRENCY_HISTORY_NOF_ELEMENTS must be an integer.")
 
     try:
         trade_threshold = float(env.get("TRADE_THRESHOLD", "10.0"))
     except ValueError:
-        raise EnvironmentError("TRADE_THRESHOLD måste vara ett tal (float).")
+        raise EnvironmentError("TRADE_THRESHOLD must be a number (float).")
 
     try:
         take_profit_percentage = float(env.get("TAKE_PROFIT_PERCENTAGE", "3.0"))
     except ValueError:
-        raise EnvironmentError("TAKE_PROFIT_PERCENTAGE måste vara ett tal (float).")
+        raise EnvironmentError("TAKE_PROFIT_PERCENTAGE must be a number (float).")
 
     try:
         stop_loss_percentage = float(env.get("STOP_LOSS_PERCENTAGE", "3.0"))
     except ValueError:
-        raise EnvironmentError("STOP_LOSS_PERCENTAGE måste vara ett tal (float).")
+        raise EnvironmentError("STOP_LOSS_PERCENTAGE must be a number (float).")
 
     dry_run = _parse_bool(env.get("DRY_RUN", "false"))
     ta2_use_ema50_filter = _parse_bool(env.get("TA2_USE_EMA50_FILTER", "false"))
@@ -171,7 +171,7 @@ def assert_env_and_report() -> Config:
     cfg = load_config_from_env()
 
     # Minimal rapport (inga hemliga värden skrivs ut)
-    print("AssertEnv: miljövariabler validerade.")
+    print("AssertEnv: environment variables validated.")
     print(f" - currencies: {', '.join(cfg.currencies)}")
     print(f" - binance_base_url: {cfg.binance_base_url}")
     print(f" - data_area_root_dir: {cfg.data_area_root_dir}")

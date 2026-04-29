@@ -26,4 +26,4 @@ def clean_data_area(cfg: Config) -> None:
                 child.unlink()
                 print(f"Removed file: {child}")
         except Exception as e:
-            print(f"Varning: kunde inte ta bort {child}: {e}")
+            print(f"Warning: could not remove {child}: {e}")

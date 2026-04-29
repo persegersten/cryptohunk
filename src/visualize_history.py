@@ -54,12 +54,12 @@ class VisualizeHistory:
         """
         backtest_file = self.data_root / "output" / "backtesting" / f"{currency}_backtesting.csv"
         if not backtest_file.exists():
-            log.info("Backtestfil saknas för %s: %s", currency, backtest_file)
+            log.info("Backtest file missing for %s: %s", currency, backtest_file)
             return None
         try:
             df = pd.read_csv(backtest_file)
             if "timestamp_ms" not in df.columns or "signal" not in df.columns:
-                log.warning("Backtestfil för %s saknar förväntade kolumner", currency)
+                log.warning("Backtest file for %s is missing expected columns", currency)
                 return None
             df["timestamp_ms"] = pd.to_numeric(df["timestamp_ms"], errors="coerce")
             df = df.dropna(subset=["timestamp_ms"])
@@ -67,42 +67,42 @@ class VisualizeHistory:
                 return None
             df["datetime"] = pd.to_datetime(df["timestamp_ms"], unit="ms", utc=True)
             df = df.sort_values("datetime").reset_index(drop=True)
-            log.info("Läste backtestdata för %s: %d rader", currency, len(df))
+            log.info("Read backtest data for %s: %d rows", currency, len(df))
             return df
         except Exception as e:
-            log.error("Fel vid läsning av backtestdata för %s: %s", currency, e)
+            log.error("Error reading backtest data for %s: %s", currency, e)
             return None
 
     def _read_history(self, currency: str) -> Optional[pd.DataFrame]:
         """Läs kurshistorik för angiven valuta."""
         csv_file = self.history_root / f"{currency}_history.csv"
         if not csv_file.exists():
-            log.warning("Historikfil saknas för %s: %s", currency, csv_file)
+            log.warning("History file missing for %s: %s", currency, csv_file)
             return None
         try:
             df = pd.read_csv(csv_file)
             df["datetime"] = pd.to_datetime(df["Open_Time_ms"], unit="ms", utc=True)
-            log.info("Läste kurshistorik för %s: %d rader", currency, len(df))
+            log.info("Read price history for %s: %d rows", currency, len(df))
             return df
         except Exception as e:
-            log.error("Fel vid läsning av kurshistorik för %s: %s", currency, e)
+            log.error("Error reading price history for %s: %s", currency, e)
             return None
 
     def _read_trades(self) -> List[Dict[str, Any]]:
         """Läs tradehistorik från JSON-fil."""
         if not self.trades_file.exists():
-            log.info("Tradehistorikfil saknas: %s", self.trades_file)
+            log.info("Trade history file missing: %s", self.trades_file)
             return []
         try:
             with open(self.trades_file, "r", encoding="utf-8") as f:
                 trades = json.load(f)
             if not isinstance(trades, list):
-                log.warning("Oväntat format på tradehistorik")
+                log.warning("Unexpected trade history format")
                 return []
-            log.info("Läste %d trades från %s", len(trades), self.trades_file)
+            log.info("Read %d trades from %s", len(trades), self.trades_file)
             return trades
         except Exception as e:
-            log.error("Fel vid läsning av tradehistorik: %s", e)
+            log.error("Error reading trade history: %s", e)
             return []
 
     def _filter_trades_for_currency(
@@ -218,7 +218,7 @@ class VisualizeHistory:
         Sparas till DATA_AREA_ROOT_DIR/visualize/debug.csv.
         """
         if not dfs:
-            log.info("Ingen kursdata – debug-CSV skrivs inte")
+            log.info("No price history data - debug CSV will not be written")
             return
 
         # Bygg gemensamt tidsindex
@@ -235,7 +235,7 @@ class VisualizeHistory:
         week_ago = now - pd.Timedelta(days=7)
         idx = idx[idx >= week_ago]
         if len(idx) == 0:
-            log.info("Ingen prisdata för senaste veckan – debug-CSV skrivs inte")
+            log.info("No price data for the last week - debug CSV will not be written")
             return
 
         currencies = sorted(dfs.keys())
@@ -254,9 +254,9 @@ class VisualizeHistory:
                         _portfolio_balances[_asset.upper()] = float(_info.get("total", 0))
                     except (ValueError, TypeError):
                         pass
-                log.info("Läste portföljsaldon från portfolio.json: %s", list(_portfolio_balances.keys()))
+                log.info("Read portfolio balances from portfolio.json: %s", list(_portfolio_balances.keys()))
             except Exception as e:
-                log.warning("Kunde inte läsa portföljsaldon från portfolio.json: %s", e)
+                log.warning("Could not read portfolio balances from portfolio.json: %s", e)
 
         for currency in currencies:
             df = dfs[currency]
@@ -346,9 +346,9 @@ class VisualizeHistory:
         debug_file = self.output_dir / "debug.csv"
         try:
             debug_df.to_csv(debug_file, index=False)
-            log.info("Debug-CSV sparad: %s (%d rader)", debug_file, len(debug_df))
+            log.info("Debug CSV saved: %s (%d rows)", debug_file, len(debug_df))
         except Exception as e:
-            log.error("Fel vid sparande av debug-CSV: %s", e)
+            log.error("Error saving debug CSV: %s", e)
 
     def _read_ta_signal(self, currency: str) -> str:
         """
@@ -412,15 +412,15 @@ class VisualizeHistory:
                         _portfolio_balances[_asset.upper()] = float(_info.get("total", 0))
                     except (ValueError, TypeError):
                         log.warning(
-                            "Ogiltigt saldo för %s i portfolio.json: %s",
+                            "Invalid balance for %s in portfolio.json: %s",
                             _asset, _info.get("total"),
                         )
                 log.info(
-                    "Portföljsaldon lästa för performance-diagram: %s",
+                    "Portfolio balances read for performance chart: %s",
                     list(_portfolio_balances.keys()),
                 )
             except Exception as e:
-                log.warning("Kunde inte läsa portföljsaldon från portfolio.json: %s", e)
+                log.warning("Could not read portfolio balances from portfolio.json: %s", e)
 
         portfolio_value = pd.Series(0.0, index=idx)
 
@@ -501,11 +501,11 @@ class VisualizeHistory:
         result = result[result["portfolio_value"] > 0].reset_index(drop=True)
 
         if result.empty:
-            log.info("Portföljberäkning: inget positivt innehav hittades")
+            log.info("Portfolio calculation: no positive holdings found")
             return pd.DataFrame(columns=["datetime", "portfolio_value"])
 
         log.info(
-            "Portföljvärde beräknat: %d datapunkter, start=%.2f USDC, slut=%.2f USDC",
+            "Portfolio value calculated: %d data points, start=%.2f USDC, end=%.2f USDC",
             len(result),
             result["portfolio_value"].iloc[0],
             result["portfolio_value"].iloc[-1],
@@ -532,7 +532,7 @@ class VisualizeHistory:
         """
         perf_df = self._build_portfolio_performance(trades, dfs)
         if perf_df.empty:
-            log.warning("Ingen portföljdata – hoppar över portföljdiagram")
+            log.warning("No portfolio data - skipping portfolio chart")
             return None
 
         fig = go.Figure()
@@ -580,7 +580,7 @@ class VisualizeHistory:
             one_month_ago = last_date - pd.DateOffset(months=1)
             fig.update_xaxes(range=[one_month_ago, last_date])
 
-        log.info("Portföljdiagram byggt")
+        log.info("Portfolio chart built")
         return fig.to_html(
             full_html=False,
             include_plotlyjs=False,
@@ -619,7 +619,7 @@ class VisualizeHistory:
                     except (ValueError, TypeError):
                         pass
             except Exception as e:
-                log.warning("Kunde inte läsa portföljsaldon för sammanfattning: %s", e)
+                log.warning("Could not read portfolio balances for summary: %s", e)
 
         # Build holdings table rows
         holdings_rows = []
@@ -823,7 +823,7 @@ class VisualizeHistory:
         if not trades_rows:
             trades_tbody = '<tr><td colspan="6" style="text-align:center;color:#6c7086">Inga trades</td></tr>\n'
 
-        log.info("Overview-fliken byggd")
+        log.info("Overview tab built")
         return (
             '<div id="chart-Overview" style="padding:20px 32px">\n'
             '<h2 class="vh-sum-h2">Portföljöversikt</h2>\n'
@@ -856,7 +856,7 @@ class VisualizeHistory:
         """
         df = self._read_history(currency)
         if df is None or df.empty:
-            log.warning("Ingen kurshistorik för %s – hoppar över diagram", currency)
+            log.warning("No price history for %s - skipping chart", currency)
             return None
 
         currency_trades = self._filter_trades_for_currency(trades, currency)
@@ -1039,7 +1039,7 @@ class VisualizeHistory:
             one_month_ago = last_date - pd.DateOffset(months=1)
             fig.update_xaxes(range=[one_month_ago, last_date], row=1, col=1)
 
-        log.info("Diagram byggt för %s", currency)
+        log.info("Chart built for %s", currency)
         return fig.to_html(
             full_html=False,
             include_plotlyjs=False,
@@ -1191,7 +1191,7 @@ class VisualizeHistory:
         Returns:
             True om minst ett diagram genererades framgångsrikt
         """
-        log.info("=== Startar VisualizeHistory ===")
+        log.info("=== Starting VisualizeHistory ===")
         trades = self._read_trades()
         charts: Dict[str, str] = {}
         dfs: Dict[str, pd.DataFrame] = {}
@@ -1204,21 +1204,21 @@ class VisualizeHistory:
                 div = self.generate_chart(currency, trades)
                 if div is not None:
                     charts[currency] = div
-                    log.info("Diagram genererat för %s", currency)
+                    log.info("Chart generated for %s", currency)
                 else:
-                    log.warning("Kunde inte generera diagram för %s", currency)
+                    log.warning("Could not generate chart for %s", currency)
             except Exception as e:
-                log.error("Oväntat fel vid generering av diagram för %s: %s", currency, e)
+                log.error("Unexpected error generating chart for %s: %s", currency, e)
 
         # Skriv debug-CSV oavsett om diagram genererats
         try:
             self._write_debug_csv(trades, dfs)
         except Exception as e:
-            log.error("Fel vid skrivning av debug-CSV: %s", e)
+            log.error("Error writing debug CSV: %s", e)
 
         if not charts:
             log.info(
-                "VisualizeHistory klar: 0/%d diagram genererade",
+                "VisualizeHistory completed: 0/%d charts generated",
                 len(self.cfg.currencies),
             )
             return False
@@ -1228,17 +1228,17 @@ class VisualizeHistory:
             portfolio_div = self.generate_portfolio_chart(trades, dfs)
             if portfolio_div is not None:
                 charts["Performance"] = portfolio_div
-                log.info("Portföljdiagram genererat")
+                log.info("Portfolio chart generated")
             else:
-                log.info("Inget portföljdiagram genererat (inga trades med innehav)")
+                log.info("No portfolio chart generated (no trades with holdings)")
         except Exception as e:
-            log.error("Oväntat fel vid generering av portföljdiagram: %s", e)
+            log.error("Unexpected error generating portfolio chart: %s", e)
 
         # Generera overview-flik
         try:
             charts["Overview"] = self.generate_summary_html(trades, dfs)
         except Exception as e:
-            log.error("Oväntat fel vid generering av overview: %s", e)
+            log.error("Unexpected error generating overview: %s", e)
 
         self._ensure_dir(self.output_dir)
         html_file = self.output_dir / "history_chart.html"
@@ -1247,14 +1247,14 @@ class VisualizeHistory:
         try:
             with open(html_file, "w", encoding="utf-8") as f:
                 f.write(html_content)
-            log.info("Kombinerat diagram sparat: %s", html_file)
+            log.info("Combined chart saved: %s", html_file)
         except Exception as e:
-            log.error("Fel vid sparande av kombinerat diagram: %s", e)
+            log.error("Error saving combined chart: %s", e)
             return False
 
         _special = {"Performance", "Overview"}
         log.info(
-            "VisualizeHistory klar: %d/%d valutadiagram genererade",
+            "VisualizeHistory completed: %d/%d currency charts generated",
             len([c for c in charts if c not in _special]),
             len(self.cfg.currencies),
         )
@@ -1266,5 +1266,5 @@ def visualize_history_main(cfg: Config) -> None:
     viz = VisualizeHistory(cfg)
     success = viz.run()
     if not success:
-        log.error("VisualizeHistory misslyckades – inga diagram genererades")
+        log.error("VisualizeHistory failed - no charts were generated")
         raise SystemExit(1)

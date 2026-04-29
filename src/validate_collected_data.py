@@ -50,7 +50,7 @@ class ValidateCollectedData:
         for cur in self.cfg.currencies:
             hist_file = history_root / f"{cur}_history.csv"
             if not hist_file.exists():
-                res_err.append(f"History-filen saknas för valuta '{cur}': {hist_file}")
+                res_err.append(f"History file missing for currency '{cur}': {hist_file}")
             else:
                 res_ok.append(f"{cur} -> {hist_file.name}")
         return {"ok": res_ok, "errors": res_err}
@@ -65,12 +65,12 @@ class ValidateCollectedData:
         portfolio_dir = self.data_root / "portfolio"
         files = self._list_regular_files(portfolio_dir)
         if not portfolio_dir.exists():
-            res_err.append(f"Portfolio-mappen saknas: {portfolio_dir}")
+            res_err.append(f"Portfolio directory missing: {portfolio_dir}")
         elif len(files) == 0:
-            res_err.append(f"Ingen fil hittades i portfolio-mappen: {portfolio_dir}")
+            res_err.append(f"No file found in portfolio directory: {portfolio_dir}")
         elif len(files) > 1:
             names = ", ".join([f.name for f in files])
-            res_err.append(f"Flera filer hittades i portfolio-mappen: {names}")
+            res_err.append(f"Multiple files found in portfolio directory: {names}")
         else:
             res_ok.append(files[0].name)
         return {"ok": res_ok, "errors": res_err}
@@ -85,12 +85,12 @@ class ValidateCollectedData:
         trades_dir = self.data_root / "trades"
         files = self._list_regular_files(trades_dir)
         if not trades_dir.exists():
-            res_err.append(f"Trades-mappen saknas: {trades_dir}")
+            res_err.append(f"Trades directory missing: {trades_dir}")
         elif len(files) == 0:
-            res_err.append(f"Ingen fil hittades i trades-mappen: {trades_dir}")
+            res_err.append(f"No file found in trades directory: {trades_dir}")
         elif len(files) > 1:
             names = ", ".join([f.name for f in files])
-            res_err.append(f"Flera filer hittades i trades-mappen: {names}")
+            res_err.append(f"Multiple files found in trades directory: {names}")
         else:
             res_ok.append(files[0].name)
         return {"ok": res_ok, "errors": res_err}
@@ -107,7 +107,7 @@ class ValidateCollectedData:
         for cur in self.cfg.currencies:
             ta_file = ta_root / f"{cur}_ta.csv"
             if not ta_file.exists():
-                res_err.append(f"TA-filen saknas för valuta '{cur}': {ta_file}")
+                res_err.append(f"TA file missing for currency '{cur}': {ta_file}")
             else:
                 res_ok.append(f"{cur} -> {ta_file.name}")
         return {"ok": res_ok, "errors": res_err}
@@ -116,7 +116,7 @@ class ValidateCollectedData:
         """
         Kör alla valideringar. Loggar resultat och returnerar True om allt är OK, annars False.
         """
-        log.info("Startar validering av insamlad data under: %s", self.data_root)
+        log.info("Starting collected data validation under: %s", self.data_root)
 
         problems: List[str] = []
         ok_messages: List[str] = []
@@ -142,12 +142,12 @@ class ValidateCollectedData:
                 log.info(m)
 
         if problems:
-            log.error("Validering misslyckades med följande problem (%d):", len(problems))
+            log.error("Validation failed with the following problems (%d):", len(problems))
             for p in problems:
                 log.error(" - %s", p)
             return False
 
-        log.info("Validering lyckades: korrekt antal filer för history/ta/portfolio/trades.")
+        log.info("Validation succeeded: correct number of files for history/ta/portfolio/trades.")
         return True
 
 
@@ -157,7 +157,7 @@ def validate_collected_data(cfg: Config) -> None:
     """
     Backwards/extern-vis entrypoint. Kastar SystemExit(1) om valideringen misslyckas.
     """
-    log.info("=== Startar CollectedDataValidation ===")
+    log.info("=== Starting CollectedDataValidation ===")
     validator = ValidateCollectedData(cfg)
     ok = validator.run()
     if not ok:
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     try:
         cfg = assert_env_and_report()
     except Exception as e:
-        log.error("Konfig kunde inte laddas: %s", e)
+        log.error("Config could not be loaded: %s", e)
         raise SystemExit(2)
 
     success = ValidateCollectedData(cfg).run()

@@ -62,11 +62,11 @@ class CollectData:
             server_time = self._fetch_server_time()
             local_time = int(time.time() * 1000)
             self.time_offset_ms = int(server_time - local_time)
-            log.info("Tids-synk mot Binance klar: server_time=%s local_time=%s offset_ms=%s",
+            log.info("Binance time sync completed: server_time=%s local_time=%s offset_ms=%s",
                      server_time, local_time, self.time_offset_ms)
         except Exception as e:
             # don't raise here — keep time_offset None so caller can decide
-            log.warning("Kunde inte hämta Binance serverTime: %s", e)
+            log.warning("Could not fetch Binance serverTime: %s", e)
             self.time_offset_ms = None
 
     def _effective_timestamp(self) -> int:
@@ -102,7 +102,7 @@ class CollectData:
                     err = r.json()
                     # Binance signed timestamp error code is -1021
                     if isinstance(err, dict) and err.get("code") == -1021 and retry_on_time_error:
-                        log.warning("Binance returned -1021 (timestamp). Försöker synka tid och retry...")
+                        log.warning("Binance returned -1021 (timestamp). Trying to sync time and retry...")
                         self.sync_time()
                         # retry once with fresh timestamp
                         return self._signed_get(endpoint, params={k: v for k, v in params.items() if k != "timestamp"}, retry_on_time_error=False)
@@ -111,12 +111,12 @@ class CollectData:
                 r.raise_for_status()
             return r
         except requests.RequestException as e:
-            log.error("RequestException för %s: %s", endpoint, e)
+            log.error("RequestException for %s: %s", endpoint, e)
             raise
 
     # --- Collect currency history (public klines) ---
     def collect_currency_rate_history(self) -> None:
-        log.info("=== Startar CollectDataCurrencyRateHistory ===")
+        log.info("=== Starting CollectDataCurrencyRateHistory ===")
 
         history_root = self.data_root / "history"
         self._ensure_dir(history_root)
@@ -127,7 +127,7 @@ class CollectData:
 
         for currency in currencies:
             try:
-                log.info("Hämtar kurshistorik för %s...", currency)
+                log.info("Fetching price history for %s...", currency)
                 symbol = f"{currency}USDT"
                 endpoint = self.cfg.binance_currency_history_endpoint
                 url = f"{self.base_url}{endpoint}"
@@ -137,14 +137,14 @@ class CollectData:
                 r.raise_for_status()
                 klines_data = r.json()
                 if not klines_data:
-                    log.warning("Ingen data för %s", symbol)
+                    log.warning("No data for %s", symbol)
                     continue
 
                 csv_file = history_root / f"{currency}_history.csv"
                 self._write_klines_to_csv(klines_data, csv_file)
-                log.info("Kurshistorik sparad för %s: %s", currency, csv_file)
+                log.info("Price history saved for %s: %s", currency, csv_file)
             except Exception as e:
-                log.error("Fel vid hämtning av kurshistorik för %s: %s", currency, e)
+                log.error("Error fetching price history for %s: %s", currency, e)
 
     def _write_klines_to_csv(self, klines_data: List[List[Any]], csv_file: Path) -> None:
         headers = [
@@ -161,7 +161,7 @@ class CollectData:
         complete_klines = [k for k in klines_data if int(k[6]) <= now_ms]
         if len(complete_klines) < len(klines_data):
             log.info(
-                "Filtrerade bort %d ofullständiga klines (Close_Time_ms > nu)",
+                "Filtered out %d incomplete klines (Close_Time_ms > now)",
                 len(klines_data) - len(complete_klines),
             )
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
@@ -175,7 +175,7 @@ class CollectData:
 
     # --- Portfolio (signed) ---
     def collect_portfolio(self) -> None:
-        log.info("=== Startar CollectDataPortfolio ===")
+        log.info("=== Starting CollectDataPortfolio ===")
         portfolio_dir = self.data_root / "portfolio"
         self._ensure_dir(portfolio_dir)
 
@@ -207,7 +207,7 @@ class CollectData:
                         # Spara free/locked som str (som Binance returnerar) för att undvika precision-överraskningar
                         filtered_total[asset] = {"free": free, "locked": locked, "total": (str(total) if total is not None else None)}
             else:
-                log.warning("Kunde inte läsa 'balances' som lista från account-responsen; sparar inget portfolio-innehåll.")
+                log.warning("Could not read 'balances' as a list from the account response; no portfolio holdings saved.")
 
             portfolio_data = {
                 "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -218,9 +218,9 @@ class CollectData:
             portfolio_file = portfolio_dir / "portfolio.json"
             with open(portfolio_file, "w", encoding="utf-8") as fh:
                 json.dump(portfolio_data, fh, indent=2, ensure_ascii=False)
-            log.info("Portfolio data sparad: %s (assets=%d)", portfolio_file, len(filtered_total))
+            log.info("Portfolio data saved: %s (assets=%d)", portfolio_file, len(filtered_total))
         except Exception as e:
-            log.error("Fel vid hämtning av portfolio-data: %s", e)
+            log.error("Error fetching portfolio data: %s", e)
 
     def _get_exchange_info(self) -> Dict[str, Any]:
         endpoint = self.cfg.binance_exchange_info_endpoint
@@ -236,7 +236,7 @@ class CollectData:
 
     # --- Trades (signed) ---
     def collect_trade_history(self) -> None:
-        log.info("=== Startar CollectDataTradeHistory ===")
+        log.info("=== Starting CollectDataTradeHistory ===")
         trades_dir = self.data_root / "trades"
         self._ensure_dir(trades_dir)
 
@@ -259,24 +259,24 @@ class CollectData:
 
             if not symbols:
                 # fallback: om filtret ger tomt (oväntat), hämta alla symboler
-                log.warning("Inga symboler hittades efter filtrering — fallback till alla symboler.")
+                log.warning("No symbols found after filtering - falling back to all symbols.")
                 symbols = [s_info["symbol"] for s_info in exchange_info.get("symbols", [])]
 
-            log.info("Hämtar tradehistorik för %s symboler (filtrerade)...", len(symbols))
+            log.info("Fetching trade history for %s symbols (filtered)...", len(symbols))
             for sym in symbols:
                 try:
                     trades = self._get_trades_for_symbol(sym)
                     if trades:
                         all_trades.extend(trades)
                 except Exception as e:
-                    log.warning("Fel vid hämtning av trades för %s: %s", sym, e)
+                    log.warning("Error fetching trades for %s: %s", sym, e)
 
             trades_file = trades_dir / "trades.json"
             with open(trades_file, "w", encoding="utf-8") as fh:
                 json.dump(all_trades, fh, indent=2, ensure_ascii=False)
-            log.info("Tradehistorik sparad: %s (%d trades)", trades_file, len(all_trades))
+            log.info("Trade history saved: %s (%d trades)", trades_file, len(all_trades))
         except Exception as e:
-            log.error("Fel vid hämtning av tradehistorik: %s", e)
+            log.error("Error fetching trade history: %s", e)
 
     def _get_trades_for_symbol(self, symbol: str) -> List[Dict[str, Any]]:
         endpoint = self.cfg.binance_my_trades_endpoint
@@ -288,14 +288,14 @@ class CollectData:
             return []
 
     def run(self) -> None:
-        log.info("Startar CollectData-modulen...")
+        log.info("Starting CollectData module...")
         try:
             self.collect_currency_rate_history()
             self.collect_portfolio()
             self.collect_trade_history()
-            log.info("CollectData avslutad framgångsrikt!")
+            log.info("CollectData completed successfully!")
         except Exception as e:
-            log.error("Kritiskt fel i CollectData: %s", e)
+            log.error("Critical error in CollectData: %s", e)
             sys.exit(1)
 
 

@@ -60,14 +60,14 @@ class Backtest:
         """Läs historik-CSV för en valuta. Returnerar None vid fel."""
         csv_file = self.history_root / f"{currency}_history.csv"
         if not csv_file.exists():
-            log.error("Historikfil saknas för %s: %s", currency, csv_file)
+            log.error("History file missing for %s: %s", currency, csv_file)
             return None
         try:
             df = pd.read_csv(csv_file)
-            log.info("Läste historik för %s: %d rader", currency, len(df))
+            log.info("Read history for %s: %d rows", currency, len(df))
             return df
         except Exception as e:
-            log.error("Fel vid läsning av historikfil för %s: %s", currency, e)
+            log.error("Error reading history file for %s: %s", currency, e)
             return None
 
     def _compute_full_ta(self, history_df: pd.DataFrame, currency: str) -> Optional[pd.DataFrame]:
@@ -77,7 +77,7 @@ class Backtest:
         Återanvänder beräkningsmetoderna i TechnicalAnalysis.
         """
         if "Close" not in history_df.columns:
-            log.error("Close-kolumn saknas i historiken för %s", currency)
+            log.error("Close column missing in history for %s", currency)
             return None
 
         result_df = pd.DataFrame()
@@ -101,7 +101,7 @@ class Backtest:
             result_df["MACD"] = macd_line.values
             result_df["MACD_Signal"] = signal_line.values
         except Exception as e:
-            log.error("Fel vid beräkning av TA-indikatorer för %s: %s", currency, e)
+            log.error("Error calculating TA indicators for %s: %s", currency, e)
             return None
 
         return result_df
@@ -128,7 +128,7 @@ class Backtest:
 
         if len(ta_df) <= start_idx:
             log.warning(
-                "Otillräckligt med data för %s (behöver > %d rader, har %d)",
+                "Insufficient data for %s (need > %d rows, have %d)",
                 currency,
                 start_idx,
                 len(ta_df),
@@ -198,10 +198,10 @@ class Backtest:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(records)
-            log.info("Backtestresultat sparat: %s (%d rader)", output_file, len(records))
+            log.info("Backtest results saved: %s (%d rows)", output_file, len(records))
             return True
         except Exception as e:
-            log.error("Fel vid sparande av backtestresultat för %s: %s", currency, e)
+            log.error("Error saving backtest results for %s: %s", currency, e)
             return False
 
     def run(self) -> bool:
@@ -211,8 +211,8 @@ class Backtest:
         Sparar en CSV per valuta i output_root/<CURRENCY>_backtesting.csv.
         Returnerar True vid framgång, False vid fel.
         """
-        log.info("=== Startar Backtest ===")
-        log.info("Valutor: %s", self.cfg.currencies)
+        log.info("=== Starting Backtest ===")
+        log.info("Currencies: %s", self.cfg.currencies)
 
         # Säkerställ att utdatakatalogen finns innan vi börjar
         self.output_root.mkdir(parents=True, exist_ok=True)
@@ -221,20 +221,20 @@ class Backtest:
 
         for currency in self.cfg.currencies:
             currency_upper = currency.upper()
-            log.info("Processar %s...", currency_upper)
+            log.info("Processing %s...", currency_upper)
 
             history_df = self._load_history(currency_upper)
             if history_df is None or history_df.empty:
-                log.warning("Hoppar över %s – ingen historikdata", currency_upper)
+                log.warning("Skipping %s - no history data", currency_upper)
                 continue
 
             ta_df = self._compute_full_ta(history_df, currency_upper)
             if ta_df is None or ta_df.empty:
-                log.warning("Hoppar över %s – kunde inte beräkna TA", currency_upper)
+                log.warning("Skipping %s - could not calculate TA", currency_upper)
                 continue
 
             records = self._simulate_currency(currency_upper, ta_df)
-            log.info("Backtest %s: %d poster genererade", currency_upper, len(records))
+            log.info("Backtest %s: %d records generated", currency_upper, len(records))
 
             if not self._save_results(currency_upper, records):
                 success = False
@@ -254,7 +254,7 @@ def backtest_main(cfg: Config) -> None:
     bt = Backtest(cfg)
     success = bt.run()
     if not success:
-        log.error("Backtest misslyckades")
+        log.error("Backtest failed")
         raise SystemExit(1)
 
 
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     try:
         cfg = assert_env_and_report()
     except Exception as e:
-        log.error("Konfig kunde inte laddas: %s", e)
+        log.error("Config could not be loaded: %s", e)
         raise SystemExit(2)
 
     success = Backtest(cfg).run()
