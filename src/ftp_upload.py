@@ -7,15 +7,65 @@ till angiven FTP-server (FTP_HOST) i angiven katalog (FTP_DIR).
 """
 from __future__ import annotations
 
+import argparse
 import ftplib
 import logging
+import os
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Sequence
 
 from .config import Config
 
 log = logging.getLogger(__name__)
+
+
+def _upload_files(files: List[Path], host: str, directory: str,
+                  username: str, password: str) -> int:
+    """Ladda upp filer via FTP. Returnerar antal uppladdade filer."""
+    uploaded = 0
+    log.info("Connecting to FTP %s as %s ...", host, username)
+    ftp = ftplib.FTP(host)
+    try:
+        ftp.login(username, password)
+        if directory:
+            ftp.cwd(directory)
+            log.info("Changed FTP directory to %s", directory)
+        for filepath in files:
+            remote_name = filepath.name
+            log.info("Uploading %s -> %s", filepath, remote_name)
+            with open(filepath, "rb") as f:
+                ftp.storbinary(f"STOR {remote_name}", f)
+            uploaded += 1
+            log.info("Upload completed: %s", remote_name)
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            ftp.close()
+    return uploaded
+
+
+def upload_file_to_ftp(filepath: Path, host: Optional[str], directory: Optional[str],
+                       username: Optional[str], password: Optional[str]) -> bool:
+    """Ladda upp en enskild fil via FTP med samma målmapp som övriga uppladdningar."""
+    if not host:
+        raise ValueError("FTP_HOST must be set for FTP upload.")
+    if not username:
+        raise ValueError("FTP_USERNAME must be set for FTP upload.")
+    if not password:
+        raise ValueError("FTP_PASSWORD must be set for FTP upload.")
+    if not filepath.is_file():
+        raise FileNotFoundError(f"File does not exist: {filepath}")
+
+    uploaded = _upload_files(
+        [filepath],
+        host=host,
+        directory=directory or "",
+        username=username,
+        password=password,
+    )
+    return uploaded == 1
 
 
 class FtpUpload:
@@ -37,27 +87,7 @@ class FtpUpload:
     def _upload_files(self, files: List[Path], host: str, directory: str,
                       username: str, password: str) -> int:
         """Ladda upp filer via FTP. Returnerar antal uppladdade filer."""
-        uploaded = 0
-        log.info("Connecting to FTP %s as %s ...", host, username)
-        ftp = ftplib.FTP(host)
-        try:
-            ftp.login(username, password)
-            if directory:
-                ftp.cwd(directory)
-                log.info("Changed FTP directory to %s", directory)
-            for filepath in files:
-                remote_name = filepath.name
-                log.info("Uploading %s -> %s", filepath, remote_name)
-                with open(filepath, "rb") as f:
-                    ftp.storbinary(f"STOR {remote_name}", f)
-                uploaded += 1
-                log.info("Upload completed: %s", remote_name)
-        finally:
-            try:
-                ftp.quit()
-            except Exception:
-                ftp.close()
-        return uploaded
+        return _upload_files(files, host, directory, username, password)
 
     def run(self) -> bool:
         """
@@ -102,3 +132,24 @@ def ftp_upload_main(cfg: Config) -> None:
     success = uploader.run()
     if not success:
         log.warning("FtpUpload: no files were uploaded")
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI för att ladda upp en enskild fil via FTP_* miljövariabler."""
+    parser = argparse.ArgumentParser(description="Upload a single file via FTP.")
+    parser.add_argument("filepath", type=Path, help="Local file to upload")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    upload_file_to_ftp(
+        args.filepath,
+        host=os.environ.get("FTP_HOST"),
+        directory=os.environ.get("FTP_DIR"),
+        username=os.environ.get("FTP_USERNAME"),
+        password=os.environ.get("FTP_PASSWORD"),
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
