@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import Config
-from src.ftp_upload import FtpUpload
+from src.ftp_upload import FtpUpload, upload_file_to_ftp
 
 
 def _make_cfg(data_root: str, **overrides) -> Config:
@@ -188,6 +188,50 @@ class TestFtpUploadRun(unittest.TestCase):
         self.assertEqual(mock_ftp.storbinary.call_count, 1)
         stor_call = mock_ftp.storbinary.call_args
         self.assertIn("STOR BTC_chart.html", stor_call[0][0])
+
+
+class TestUploadFileToFtp(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.filepath = Path(self.test_dir) / "test.log"
+        self.filepath.write_text("Hellow world\n", encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    @patch("src.ftp_upload.ftplib.FTP")
+    def test_upload_file_to_ftp_uploads_file(self, mock_ftp_class):
+        mock_ftp = MagicMock()
+        mock_ftp_class.return_value = mock_ftp
+
+        result = upload_file_to_ftp(
+            self.filepath,
+            host="ftp.example.com",
+            directory="/remote/dir",
+            username="testuser",
+            password="testpass",
+        )
+
+        self.assertTrue(result)
+        mock_ftp_class.assert_called_once_with("ftp.example.com")
+        mock_ftp.login.assert_called_once_with("testuser", "testpass")
+        mock_ftp.cwd.assert_called_once_with("/remote/dir")
+        mock_ftp.storbinary.assert_called_once()
+        self.assertIn("STOR test.log", mock_ftp.storbinary.call_args[0][0])
+        mock_ftp.quit.assert_called_once()
+
+    def test_upload_file_to_ftp_raises_if_file_missing(self):
+        missing = Path(self.test_dir) / "missing.log"
+
+        with self.assertRaises(FileNotFoundError):
+            upload_file_to_ftp(
+                missing,
+                host="ftp.example.com",
+                directory="/remote/dir",
+                username="testuser",
+                password="testpass",
+            )
 
 
 if __name__ == "__main__":
