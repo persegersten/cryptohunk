@@ -25,6 +25,6 @@ exit_code=${PIPESTATUS[0]}
 set -e
 
 echo "Uploading log file to FTP server..."
-"$PYTHON" -m src.ftp_upload "$LOG_FILE"
+$PYTHON -m src.ftp_upload "$LOG_FILE"
 
 exit "$exit_code"
