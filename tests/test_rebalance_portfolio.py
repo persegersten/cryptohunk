@@ -6,9 +6,9 @@ These tests validate that the portfolio rebalancing logic works correctly:
 - Signal generation based on TA scores and portfolio rules
 - Multiple BUY recommendations allowed
 - Multiple SELL recommendations
-- Rule 1: profit > take_profit_percentage -> SELL (overrides TA, regardless of holdings size)
+- Rule 1: holdings >= TRADE_THRESHOLD AND profit > take_profit_percentage -> SELL
 - Rule 2: holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage -> SELL (overrides TA)
-- Rule 3: holdings < TRADE_THRESHOLD -> no SELL (unless Rule 1 applies)
+- Rule 3: holdings < TRADE_THRESHOLD -> no SELL
 - TA is calculated for all configured currencies, even those without holdings
 - Priority-based sorting
 """
@@ -179,8 +179,8 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(signal, "HOLD")
         self.assertEqual(priority, 3)  # TA-based priority
 
-    def test_override_sell_with_profit_above_10_percent(self):
-        """Test Rule 1: profit > 10% -> SELL (highest priority)."""
+    def test_take_profit_does_not_sell_below_threshold(self):
+        """Test Rule 3: holdings < TRADE_THRESHOLD -> no SELL even when profit exceeds Rule 1."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings < 100 USDC (TRADE_THRESHOLD) AND profit > 10%
@@ -192,11 +192,11 @@ class TestRebalancePortfolio(unittest.TestCase):
             macd_sell=False
         )
         
-        self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
-        self.assertEqual(priority, 1)  # Rule 1 has highest priority
+        self.assertEqual(signal, "HOLD")  # Small positions are protected from SELL
+        self.assertEqual(priority, 3)  # TA-based priority
 
     def test_take_profit_triggers_above_threshold(self):
-        """Test Rule 1: profit > 10% -> SELL even when holdings >= TRADE_THRESHOLD."""
+        """Test Rule 1: holdings >= TRADE_THRESHOLD AND profit > 10% -> SELL."""
         rebalancer = RebalancePortfolio(self.cfg)
         
         # Holdings >= 100 USDC (TRADE_THRESHOLD) AND profit > 10%

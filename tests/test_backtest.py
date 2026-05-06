@@ -204,8 +204,8 @@ class TestBacktestSimulateCurrency(unittest.TestCase):
     def test_trade_threshold_rules_skipped_sell_executed_on_small_holdings(self):
         """Backtest should execute SELL from TA exit rule regardless of holdings size.
 
-        In live trading, Rule 3 prevents SELL when holdings < TRADE_THRESHOLD (unless
-        Rule 1 take-profit applies). In backtesting this rule must be skipped so that
+        In live trading, Rule 3 prevents SELL when holdings < TRADE_THRESHOLD.
+        In backtesting this rule must be skipped so that
         a TA SELL signal always triggers a SELL trade.
         We verify by constructing a TA DataFrame where MACD < MACD_Signal (exit rule)
         and calling _simulate_currency directly with a tiny simulated holding.

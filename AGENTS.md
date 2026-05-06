@@ -131,12 +131,12 @@ cryptohunk/
 - SELL when: MACD < MACD_Signal
 
 **Trading Rules (in priority order):**
-1. **Rule 1 (Highest Priority)**: Take profit on small positions
-   - If holdings < TRADE_THRESHOLD AND profit > TAKE_PROFIT_PERCENTAGE → SELL
+1. **Rule 1 (Highest Priority)**: Take profit on threshold-sized positions
+   - If holdings >= TRADE_THRESHOLD AND profit > TAKE_PROFIT_PERCENTAGE → SELL
 2. **Rule 2**: Stop loss on large positions
    - If holdings >= TRADE_THRESHOLD AND loss > STOP_LOSS_PERCENTAGE → SELL
 3. **Rule 3**: Protect small positions
-   - If holdings < TRADE_THRESHOLD → no SELL (unless Rule 1 applies)
+   - If holdings < TRADE_THRESHOLD → no SELL
 4. **TA-based signals**: score >= 1 = BUY, score <= -1 = SELL (after rules above)
 
 ### 8. Trade Plan Creation (`create_trade_plan.py`)

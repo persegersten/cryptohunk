@@ -79,9 +79,9 @@ Two TA strategies are available:
 ## Rebalancing Rules
 
 **Trading Rules:**
-1. Take profit on small positions when gain > TAKE_PROFIT_PERCENTAGE
+1. Take profit when holdings >= TRADE_THRESHOLD and gain > TAKE_PROFIT_PERCENTAGE
 2. Stop loss on large positions when loss > STOP_LOSS_PERCENTAGE
-3. No selling positions below TRADE_THRESHOLD (except rule 1)
+3. No selling positions below TRADE_THRESHOLD
 4. Maximum one BUY per cycle
 
 ## Testing
