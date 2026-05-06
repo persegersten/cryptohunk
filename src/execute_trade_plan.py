@@ -230,8 +230,7 @@ class ExecuteTradePlan:
         Note:
             Currently assumes USDC as the quote currency for all trades.
             This is consistent with the trade_plan.csv format which uses value_usdc.
-            If support for other quote currencies is needed (e.g., USDT), the trade_plan
-            CSV format should be extended to include a 'quote_currency' column.
+            USDC is the only supported quote currency.
         """
         action = trade['action']
         currency = trade['currency']

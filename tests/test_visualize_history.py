@@ -35,7 +35,7 @@ def _make_cfg(data_root: str) -> Config:
         trade_threshold=10.0,
         take_profit_percentage=10.0,
         stop_loss_percentage=6.0,
-        allowed_quote_assets=["USDT"],
+        allowed_quote_assets=["USDC"],
         ftp_host=None,
         ftp_dir=None,
         ftp_username=None,
@@ -117,14 +117,14 @@ class TestVisualizeHistory(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_read_trades_returns_list(self):
-        trades = [{"id": 1, "symbol": "BTCUSDT", "isBuyer": True, "price": "40000", "qty": "0.01",
+        trades = [{"id": 1, "symbol": "BTCUSDC", "isBuyer": True, "price": "40000", "qty": "0.01",
                    "quoteQty": "400", "commission": "0.0001", "commissionAsset": "BTC",
                    "time": 1_700_003_600_000, "orderId": 100}]
         _create_trades_json(self.data_root / "trades", trades)
         viz = VisualizeHistory(self.cfg)
         result = viz._read_trades()
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["symbol"], "BTCUSDT")
+        self.assertEqual(result[0]["symbol"], "BTCUSDC")
 
     def test_read_trades_missing_file_returns_empty_list(self):
         viz = VisualizeHistory(self.cfg)
@@ -137,8 +137,8 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_filter_trades_for_currency(self):
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "time": 1_700_000_000_000},
-            {"symbol": "ETHUSDT", "isBuyer": False, "time": 1_700_000_000_000},
+            {"symbol": "BTCUSDC", "isBuyer": True, "time": 1_700_000_000_000},
+            {"symbol": "ETHUSDC", "isBuyer": False, "time": 1_700_000_000_000},
             {"symbol": "BTCUSDC", "isBuyer": False, "time": 1_700_000_000_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -153,7 +153,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_format_trade_label_buy(self):
         trade = {
-            "id": 42, "orderId": 99, "symbol": "BTCUSDT", "isBuyer": True,
+            "id": 42, "orderId": 99, "symbol": "BTCUSDC", "isBuyer": True,
             "price": "41000.00", "qty": "0.001", "quoteQty": "41.00",
             "commission": "0.000001", "commissionAsset": "BTC",
             "time": 1_700_003_600_000,
@@ -161,7 +161,7 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         label = viz._format_trade_label(trade)
         self.assertIn("KÖP", label)
-        self.assertIn("BTCUSDT", label)
+        self.assertIn("BTCUSDC", label)
         self.assertIn("41000.00", label)
         # Trade-ID and Order-ID should NOT appear in the popup
         self.assertNotIn("Trade-ID", label)
@@ -169,9 +169,9 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_format_trade_label_sell(self):
         trade = {
-            "id": 43, "orderId": 100, "symbol": "BTCUSDT", "isBuyer": False,
+            "id": 43, "orderId": 100, "symbol": "BTCUSDC", "isBuyer": False,
             "price": "42000.00", "qty": "0.001", "quoteQty": "42.00",
-            "commission": "0.042", "commissionAsset": "USDT",
+            "commission": "0.042", "commissionAsset": "USDC",
             "time": 1_700_007_200_000,
         }
         viz = VisualizeHistory(self.cfg)
@@ -186,9 +186,9 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_format_trade_label_sell_with_buy_price_profit(self):
         trade = {
-            "id": 43, "orderId": 100, "symbol": "BTCUSDT", "isBuyer": False,
+            "id": 43, "orderId": 100, "symbol": "BTCUSDC", "isBuyer": False,
             "price": "42000.00", "qty": "0.001", "quoteQty": "42.00",
-            "commission": "0.042", "commissionAsset": "USDT",
+            "commission": "0.042", "commissionAsset": "USDC",
             "time": 1_700_007_200_000,
         }
         viz = VisualizeHistory(self.cfg)
@@ -199,9 +199,9 @@ class TestVisualizeHistory(unittest.TestCase):
 
     def test_format_trade_label_sell_with_buy_price_loss(self):
         trade = {
-            "id": 43, "orderId": 100, "symbol": "BTCUSDT", "isBuyer": False,
+            "id": 43, "orderId": 100, "symbol": "BTCUSDC", "isBuyer": False,
             "price": "38000.00", "qty": "0.001", "quoteQty": "38.00",
-            "commission": "0.038", "commissionAsset": "USDT",
+            "commission": "0.038", "commissionAsset": "USDC",
             "time": 1_700_007_200_000,
         }
         viz = VisualizeHistory(self.cfg)
@@ -220,15 +220,15 @@ class TestVisualizeHistory(unittest.TestCase):
 
         trades = [
             {
-                "id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True,
+                "id": 1, "orderId": 10, "symbol": "BTCUSDC", "isBuyer": True,
                 "price": "40100.00", "qty": "0.001", "quoteQty": "40.10",
                 "commission": "0.000001", "commissionAsset": "BTC",
                 "time": 1_700_003_600_000,
             },
             {
-                "id": 2, "orderId": 11, "symbol": "BTCUSDT", "isBuyer": False,
+                "id": 2, "orderId": 11, "symbol": "BTCUSDC", "isBuyer": False,
                 "price": "40500.00", "qty": "0.001", "quoteQty": "40.50",
-                "commission": "0.04050", "commissionAsset": "USDT",
+                "commission": "0.04050", "commissionAsset": "USDC",
                 "time": 1_700_010_800_000,
             },
         ]
@@ -238,7 +238,7 @@ class TestVisualizeHistory(unittest.TestCase):
 
         self.assertIn("plotly", html_content.lower())
         # Trade data is unicode-escaped by Plotly; check for unescaped identifiers
-        self.assertIn("BTCUSDT", html_content)
+        self.assertIn("BTCUSDC", html_content)
         # Check that both buy and sell trace names are present (unicode-escaped)
         self.assertIn('"name":"K\\u00f6p"', html_content)
         self.assertIn('"name":"S\\u00e4lj"', html_content)
@@ -251,15 +251,15 @@ class TestVisualizeHistory(unittest.TestCase):
         # Buy at 40000, sell at 42000 → +5.00 %
         trades = [
             {
-                "id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True,
+                "id": 1, "orderId": 10, "symbol": "BTCUSDC", "isBuyer": True,
                 "price": "40000.00", "qty": "0.001", "quoteQty": "40.00",
                 "commission": "0.000001", "commissionAsset": "BTC",
                 "time": 1_700_003_600_000,
             },
             {
-                "id": 2, "orderId": 11, "symbol": "BTCUSDT", "isBuyer": False,
+                "id": 2, "orderId": 11, "symbol": "BTCUSDC", "isBuyer": False,
                 "price": "42000.00", "qty": "0.001", "quoteQty": "42.00",
-                "commission": "0.042", "commissionAsset": "USDT",
+                "commission": "0.042", "commissionAsset": "USDC",
                 "time": 1_700_010_800_000,
             },
         ]
@@ -391,7 +391,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Green fill color for BUY should appear in the shapes data
-        self.assertIn("rgba(0, 115, 43, 0.20)", html_content)
+        self.assertIn("rgba(0, 138, 52, 0.20)", html_content)
 
     def test_generate_chart_includes_backtest_vrect_for_sell(self):
         """generate_chart should add a red vrect shape when backtest has SELL signals."""
@@ -409,7 +409,7 @@ class TestVisualizeHistory(unittest.TestCase):
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
         # Red fill color for SELL should appear in the shapes data
-        self.assertIn("rgba(115, 0, 0, 0.20)", html_content)
+        self.assertIn("rgba(138, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_vrect_for_hold(self):
         """generate_chart should NOT add colored background for HOLD signals."""
@@ -426,8 +426,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 115, 43, 0.20)", html_content)
-        self.assertNotIn("rgba(115, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 138, 52, 0.20)", html_content)
+        self.assertNotIn("rgba(138, 0, 0, 0.20)", html_content)
 
     def test_generate_chart_no_backtest_no_vrect(self):
         """generate_chart should not crash and produce no colored vrects when backtest file is absent."""
@@ -436,8 +436,8 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        self.assertNotIn("rgba(0, 115, 43, 0.20)", html_content)
-        self.assertNotIn("rgba(115, 0, 0, 0.20)", html_content)
+        self.assertNotIn("rgba(0, 138, 52, 0.20)", html_content)
+        self.assertNotIn("rgba(138, 0, 0, 0.20)", html_content)
 
     # ------------------------------------------------------------------
     # _build_portfolio_performance
@@ -470,7 +470,7 @@ class TestVisualizeHistory(unittest.TestCase):
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
             {
-                "symbol": "BTCUSDT", "isBuyer": True,
+                "symbol": "BTCUSDC", "isBuyer": True,
                 "qty": str(expected_qty), "price": str(expected_first_price),
                 "time": base_ms,  # at the very first candle
             }
@@ -498,10 +498,10 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "time": base_ms},
             # Sell all after 5 candles
-            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
              "price": "40050", "time": base_ms + 5 * interval_ms},
         ]
         perf = viz._build_portfolio_performance(trades, dfs)
@@ -532,9 +532,9 @@ class TestVisualizeHistory(unittest.TestCase):
             "ETH": viz._read_history("ETH"),
         }
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": str(btc_qty),
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": str(btc_qty),
              "price": str(first_price), "time": base_ms},
-            {"symbol": "ETHUSDT", "isBuyer": True, "qty": str(eth_qty),
+            {"symbol": "ETHUSDC", "isBuyer": True, "qty": str(eth_qty),
              "price": str(first_price), "time": base_ms},
         ]
         perf = viz._build_portfolio_performance(trades, dfs)
@@ -563,7 +563,7 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "time": base_ms},
         ]
         html_content = viz.generate_portfolio_chart(trades, dfs)
@@ -580,7 +580,7 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         dfs = {"BTC": viz._read_history("BTC")}
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "time": base_ms},
         ]
         html_content = viz.generate_portfolio_chart(trades, dfs)
@@ -598,7 +598,7 @@ class TestVisualizeHistory(unittest.TestCase):
         base_ms = 1_700_000_000_000
         _create_history_csv(hist_dir, "BTC", n=50)
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "time": base_ms},
         ]
         _create_trades_json(self.data_root / "trades", trades)
@@ -1026,20 +1026,20 @@ class TestVisualizeHistory(unittest.TestCase):
         """The ten most recent trades should appear in the summary trades table."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
-            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
              "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.02",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.02",
              "price": "41000", "quoteQty": "820.0", "time": base_ms + 7_200_000},
             # 11th oldest trade – should NOT appear (only 10 shown)
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.005",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.005",
              "price": "39000", "quoteQty": "195.0", "time": base_ms - 3_600_000},
         ]
         # Add 7 more trades so the oldest (195.00 USDC) falls outside the 10 shown
         for i in range(7):
             trades.append({
-                "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+                "symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
                 "price": "43000", "quoteQty": f"{500 + i * 10}.0",
                 "time": base_ms + (8 + i) * 3_600_000,
             })
@@ -1056,9 +1056,9 @@ class TestVisualizeHistory(unittest.TestCase):
         """A SELL trade should display percentage change vs. the preceding BUY."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
-            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
              "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -1075,10 +1075,10 @@ class TestVisualizeHistory(unittest.TestCase):
         base_ms = 1_700_000_000_000
         trades = [
             # Older BUY – should NOT show % change
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "38000", "quoteQty": "380.0", "time": base_ms},
             # Most recent BUY – SHOULD show % change (active holding exists)
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -1102,9 +1102,9 @@ class TestVisualizeHistory(unittest.TestCase):
         _create_portfolio_json(self.data_root, {"BTC": 0.0, "USDC": 500.0})
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
-            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
              "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -1121,12 +1121,12 @@ class TestVisualizeHistory(unittest.TestCase):
         """Partial fills sharing the same orderId should be merged into one row."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"id": 1, "orderId": 10, "symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"id": 1, "orderId": 10, "symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
             # Two fills of the same sell order (orderId=20)
-            {"id": 2, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.008",
+            {"id": 2, "orderId": 20, "symbol": "BTCUSDC", "isBuyer": False, "qty": "0.008",
              "price": "42000", "quoteQty": "336.0", "time": base_ms + 3_600_000},
-            {"id": 3, "orderId": 20, "symbol": "BTCUSDT", "isBuyer": False, "qty": "0.002",
+            {"id": 3, "orderId": 20, "symbol": "BTCUSDC", "isBuyer": False, "qty": "0.002",
              "price": "42000", "quoteQty": "84.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -1144,9 +1144,9 @@ class TestVisualizeHistory(unittest.TestCase):
         _create_portfolio_json(self.data_root, {"BTC": 0.0001, "USDC": 500.0})
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
-            {"symbol": "BTCUSDT", "isBuyer": False, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": False, "qty": "0.01",
              "price": "42000", "quoteQty": "420.0", "time": base_ms + 3_600_000},
         ]
         viz = VisualizeHistory(self.cfg)
@@ -1166,8 +1166,8 @@ class TestVisualizeHistory(unittest.TestCase):
             # USDC buy
             {"symbol": "BNBUSDC", "isBuyer": True, "qty": "0.157",
              "price": "589.16", "quoteQty": "92.50", "time": base_ms},
-            # USDT sell (should be excluded)
-            {"symbol": "BNBUSDT", "isBuyer": False, "qty": "0.134",
+            # Non-USDC sell (should be excluded)
+            {"symbol": "BNBFDUSD", "isBuyer": False, "qty": "0.134",
              "price": "591.71", "quoteQty": "79.29", "time": base_ms + 3_600_000},
             # USDC sell (should be shown)
             {"symbol": "BNBUSDC", "isBuyer": False, "qty": "0.022",
@@ -1178,28 +1178,27 @@ class TestVisualizeHistory(unittest.TestCase):
         # Only USDC trades: one KÖP and one SÄLJ
         self.assertEqual(html.count("SÄLJ"), 1)
         self.assertEqual(html.count("KÖP"), 1)
-        # The USDC sell amount should appear, the USDT one should not
+        # The USDC sell amount should appear, the non-USDC one should not
         self.assertIn("13.02 USDC", html)
         self.assertNotIn("79.29", html)
 
-    def test_generate_summary_html_fallback_when_no_usdc_trades(self):
-        """All trades shown when no USDC trades exist (fallback)."""
+    def test_generate_summary_html_ignores_non_usdc_trades(self):
+        """Non-USDC trades are not shown."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCFDUSD", "isBuyer": True, "qty": "0.01",
              "price": "40000", "quoteQty": "400.0", "time": base_ms},
         ]
         viz = VisualizeHistory(self.cfg)
         html = viz.generate_summary_html(trades, {})
-        # Should still show the trade via fallback
-        self.assertIn("400.00 USDC", html)
-        self.assertIn("KÖP", html)
+        self.assertNotIn("400.00 USDC", html)
+        self.assertNotIn("KÖP", html)
 
     def test_generate_summary_html_shows_trade_price(self):
         """Trade execution price should appear in the trades table."""
         base_ms = 1_700_000_000_000
         trades = [
-            {"symbol": "BTCUSDT", "isBuyer": True, "qty": "0.01",
+            {"symbol": "BTCUSDC", "isBuyer": True, "qty": "0.01",
              "price": "41234.56", "quoteQty": "412.35", "time": base_ms},
         ]
         viz = VisualizeHistory(self.cfg)

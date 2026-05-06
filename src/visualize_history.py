@@ -643,18 +643,11 @@ class VisualizeHistory:
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
         holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
 
-        # Build latest-10-trades table.
-        # The bot trades exclusively on USDC pairs (execute_trade_plan hardcodes
-        # USDC).  Filter out trades from other quote assets (e.g. USDT) that the
-        # data collector may have fetched to avoid misleading duplicates and
-        # incorrect "USDC" labels.
+        # Build latest-10-trades table from the single supported quote asset.
         usdc_trades = [
             t for t in trades
             if str(t.get("symbol", "")).upper().endswith("USDC")
         ]
-        # Fallback: if no USDC trades exist at all, show everything
-        if not usdc_trades:
-            usdc_trades = list(trades)
 
         # Merge partial fills that share the same orderId+symbol into one row.
         sorted_trades = sorted(usdc_trades, key=lambda t: t.get("time") or 0, reverse=True)
@@ -1008,7 +1001,7 @@ class VisualizeHistory:
 
         fig.update_layout(
             title=dict(
-                text=f"{currency}/USDT – Kurshistorik med köp och sälj",
+                text=f"{currency}/USDC – Kurshistorik med köp och sälj",
                 font=dict(size=20),
             ),
             xaxis_rangeslider_visible=False,
@@ -1017,7 +1010,7 @@ class VisualizeHistory:
             margin=dict(l=60, r=20, t=80, b=40),
             height=700,
         )
-        fig.update_yaxes(title_text="Pris (USDT)", row=1, col=1)
+        fig.update_yaxes(title_text="Pris (USDC)", row=1, col=1)
         fig.update_yaxes(title_text="Volym", row=2, col=1)
         fig.update_xaxes(title_text="Datum/tid", row=2, col=1)
         fig.update_xaxes(

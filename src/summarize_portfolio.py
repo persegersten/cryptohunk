@@ -92,18 +92,17 @@ def fetch_previous_usdc_value(cfg: Config, currency: str) -> Optional[float]:
             return None
         
         # Filter trades for this currency where it was bought (isBuyer=true)
-        # Check for both USDC and USDT as quote assets
+        # using the single supported quote asset.
         # Use exact symbol matching to avoid false positives
         relevant_trades = []
         currency_usdc = f"{currency.upper()}USDC"
-        currency_usdt = f"{currency.upper()}USDT"
         
         for trade in trades:
             symbol = trade.get("symbol", "")
             is_buyer = trade.get("isBuyer", False)
             
             # Check if this trade involves our currency with exact symbol match
-            if (symbol == currency_usdc or symbol == currency_usdt) and is_buyer:
+            if symbol == currency_usdc and is_buyer:
                 relevant_trades.append(trade)
         
         if not relevant_trades:
@@ -118,7 +117,7 @@ def fetch_previous_usdc_value(cfg: Config, currency: str) -> Optional[float]:
         price = float(last_trade.get("price", 0))
         
         if price > 0:
-            log.info(f"Last purchase price for {currency}: {price} USDC/USDT")
+            log.info(f"Last purchase price for {currency}: {price} USDC")
             return price
         else:
             log.warning(f"Invalid last purchase price for {currency}: {price}")
@@ -174,8 +173,7 @@ def summarize_portfolio(cfg: Config) -> None:
     # Prepare summary data
     summary_rows = []
     
-    # Process configured base currencies plus the USDC cash row. Other quote
-    # assets (for example USDT) are not useful in this USDC-denominated summary.
+    # Process configured base currencies plus the USDC cash row.
     quote_assets = {asset.upper() for asset in cfg.allowed_quote_assets}
     base_currencies = {currency.upper() for currency in cfg.currencies if currency.upper() not in quote_assets}
     all_currencies = sorted(base_currencies | {"USDC"})

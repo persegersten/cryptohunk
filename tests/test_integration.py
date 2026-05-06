@@ -37,7 +37,7 @@ def test_integration():
             trade_threshold=0.02,
             take_profit_percentage=10.0,  # 10% take profit
             stop_loss_percentage=6.0,  # 6% stop loss
-            allowed_quote_assets=["USDT"],
+            allowed_quote_assets=["USDC"],
             ftp_host=None,
             ftp_dir=None,
             ftp_username=None,
