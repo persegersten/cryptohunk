@@ -33,7 +33,7 @@ def _make_cfg(data_root: str, **overrides) -> Config:
         trade_threshold=10.0,
         take_profit_percentage=10.0,
         stop_loss_percentage=6.0,
-        allowed_quote_assets=["USDT"],
+        allowed_quote_assets=["USDC"],
         ftp_host="ftp.example.com",
         ftp_dir="/remote/dir",
         ftp_username="testuser",

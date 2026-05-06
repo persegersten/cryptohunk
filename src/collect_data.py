@@ -128,7 +128,7 @@ class CollectData:
         for currency in currencies:
             try:
                 log.info("Fetching price history for %s...", currency)
-                symbol = f"{currency}USDT"
+                symbol = f"{currency}USDC"
                 endpoint = self.cfg.binance_currency_history_endpoint
                 url = f"{self.base_url}{endpoint}"
                 params = {"symbol": symbol, "interval": period, "limit": nof_elements}
@@ -246,8 +246,7 @@ class CollectData:
 
             # --- Begränsa symbols till endast de par vi faktiskt bryr oss om ---
             allowed_bases = {c.upper() for c in self.cfg.currencies}
-            # Använd konfigurerbara quote-assets från Config
-            allowed_quotes = {q.upper() for q in (self.cfg.allowed_quote_assets or [])}
+            allowed_quotes = {"USDC"}
 
             symbols = []
             for s_info in exchange_info.get("symbols", []):

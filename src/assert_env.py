@@ -17,7 +17,7 @@ Miljövariabler som hanteras:
 - TRADE_THRESHOLD (valfritt, float, default: 10.0)
 - TAKE_PROFIT_PERCENTAGE (valfritt, float, default: 3.0)
 - STOP_LOSS_PERCENTAGE (valfritt, float, default: 3.0)
-- QUOTE_ASSETS (valfritt, ex "USDT,USDC" — vilka quote-valutor vi vill hämta trades för)
+- QUOTE_ASSETS (valfritt, endast "USDC" stöds)
 - TA2_USE_EMA50_FILTER (valfritt, true/false, default: false)
 """
 import os
@@ -48,8 +48,8 @@ def load_config_from_env() -> Config:
         "BINANCE_CURRENCY_HISTORY_ENDPOINT": "/api/v3/klines",
         "BINANCE_EXCHANGE_INFO_ENDPOINT": "/api/v3/exchangeInfo",
         "BINANCE_MY_TRADES_ENDPOINT": "/api/v3/myTrades",
-        # default quote assets om QUOTE_ASSETS ej är satt
-        "QUOTE_ASSETS": "USDT,USDC",
+        # default quote asset om QUOTE_ASSETS ej är satt
+        "QUOTE_ASSETS": "USDC",
     }
 
     missing = []
@@ -120,12 +120,8 @@ def load_config_from_env() -> Config:
         "BINANCE_MY_TRADES_ENDPOINT", defaults["BINANCE_MY_TRADES_ENDPOINT"]
     ).strip()
 
-    # Parse quote assets (kan vara ex "USDT,USDC" — default om env ej satt)
-    quote_assets_raw = env.get("QUOTE_ASSETS", defaults["QUOTE_ASSETS"])
-    allowed_quote_assets = _parse_currencies(quote_assets_raw)
-    if not allowed_quote_assets:
-        # Minimalt skydd: sätt default om parsing misslyckas
-        allowed_quote_assets = _parse_currencies(defaults["QUOTE_ASSETS"])
+    # Bara USDC stöds som quote asset i hela pipelinen.
+    allowed_quote_assets = _parse_currencies(defaults["QUOTE_ASSETS"])
 
     # Valfria FTP-inställningar
     ftp_host = env.get("FTP_HOST", "").strip() or None

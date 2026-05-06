@@ -115,7 +115,7 @@ cryptohunk/
 ### 5. Portfolio Summarization (`summarize_portfolio.py`)
 - Calculates current value of holdings
 - Computes profit/loss for each position
-- Aggregates liquid funds (quote assets like USDT/USDC)
+- Aggregates liquid funds in USDC
 
 ### 6. Technical Analysis (`technical_analysis.py`)
 - Reads historical price data
@@ -170,7 +170,7 @@ CURRENCY_HISTORY_NOF_ELEMENTS="300"   # Number of historical candles
 TRADE_THRESHOLD="10.0"                # Minimum trade value in USDC (default: 10.0)
 TAKE_PROFIT_PERCENTAGE="10.0"         # Default: 10%
 STOP_LOSS_PERCENTAGE="6.0"            # Default: 6%
-QUOTE_ASSETS="USDT,USDC"              # Default: "USDT,USDC"
+QUOTE_ASSETS="USDC"                   # Only supported quote asset; default: "USDC"
 DRY_RUN="true"                        # Default: false
 TA2_USE_EMA50_FILTER="false"          # Default: false (TA2 optional EMA50 trend-strength filter)
 ```
@@ -286,7 +286,7 @@ python3 -m unittest tests.test_technical_analysis
 **Empty Portfolio:**
 - Ensure Binance API keys have correct permissions
 - Check that account has actual holdings
-- Verify quote assets (USDT/USDC) are available
+- Verify USDC is available
 
 **No Trades Generated:**
 - Check TRADE_THRESHOLD value (may be too high)

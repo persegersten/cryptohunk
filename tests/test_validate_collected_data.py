@@ -32,7 +32,7 @@ def _make_cfg(tmp_dir: str) -> Config:
         trade_threshold=100.0,
         take_profit_percentage=10.0,
         stop_loss_percentage=6.0,
-        allowed_quote_assets=["USDT"],
+        allowed_quote_assets=["USDC"],
         ftp_host=None,
         ftp_dir=None,
         ftp_username=None,

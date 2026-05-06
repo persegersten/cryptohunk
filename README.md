@@ -51,7 +51,7 @@ python3 -m src.main --execute-trades
 - `TRADE_THRESHOLD` - Minimum trade value in USDC (default: 10.0)
 - `TAKE_PROFIT_PERCENTAGE` - Profit target (default: 10.0%)
 - `STOP_LOSS_PERCENTAGE` - Loss limit (default: 6.0%)
-- `QUOTE_ASSETS` - Quote currencies (default: "USDT,USDC")
+- `QUOTE_ASSETS` - Quote currency (only "USDC" is supported; default: "USDC")
 - `DRY_RUN` - Test mode without real trades (default: false)
 - `TA2_USE_EMA50_FILTER` - Enable EMA50 trend-strength filter for TA2 (default: false)
 

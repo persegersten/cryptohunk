@@ -12,7 +12,7 @@ from src.summarize_portfolio import summarize_portfolio
 
 def _cfg(data_root: str) -> Config:
     return Config(
-        currencies=["BNB", "USDT"],
+        currencies=["BNB"],
         binance_secret="test_secret",
         binance_key="test_key",
         binance_base_url="https://api.binance.com",
@@ -27,7 +27,7 @@ def _cfg(data_root: str) -> Config:
         trade_threshold=100.0,
         take_profit_percentage=10.0,
         stop_loss_percentage=6.0,
-        allowed_quote_assets=["USDT", "USDC"],
+        allowed_quote_assets=["USDC"],
         ftp_host=None,
         ftp_dir=None,
         ftp_username=None,
@@ -38,7 +38,7 @@ def _cfg(data_root: str) -> Config:
 
 
 class TestSummarizePortfolio(unittest.TestCase):
-    def test_summary_excludes_non_usdc_quote_assets(self):
+    def test_summary_uses_usdc_quote_asset(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             data_root = Path(tmpdir)
             portfolio_dir = data_root / "portfolio"
@@ -52,7 +52,6 @@ class TestSummarizePortfolio(unittest.TestCase):
                         "balances": {
                             "BNB": {"total": "2.0"},
                             "USDC": {"total": "15.0"},
-                            "USDT": {"total": "99.0"},
                         }
                     },
                     f,
@@ -79,7 +78,6 @@ class TestSummarizePortfolio(unittest.TestCase):
 
             currencies = {row["currency"] for row in rows}
             self.assertEqual(currencies, {"BNB", "USDC"})
-            self.assertNotIn("USDT", currencies)
 
 
 if __name__ == "__main__":
