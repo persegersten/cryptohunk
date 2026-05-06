@@ -229,8 +229,8 @@ class TestTA2OverrideRules(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_take_profit_overrides_ta2_hold(self):
-        """Rule 1: holdings < threshold AND profit > take_profit_pct → SELL even if TA2 says HOLD."""
+    def test_take_profit_does_not_sell_below_threshold(self):
+        """Rule 3: holdings < threshold → no SELL even when profit exceeds take_profit_pct."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
             ta_score=0,  # TA2 HOLD
@@ -238,8 +238,8 @@ class TestTA2OverrideRules(unittest.TestCase):
             percentage_change=5.0,     # > 3% profit
             macd_sell=False,
         )
-        self.assertEqual(signal, "SELL")
-        self.assertEqual(priority, 1)
+        self.assertEqual(signal, "HOLD")
+        self.assertEqual(priority, 3)
 
     def test_stop_loss_overrides_ta2_buy(self):
         """Rule 2: holdings >= threshold AND loss > stop_loss_pct → SELL even if TA2 says BUY."""
@@ -290,7 +290,7 @@ class TestTA2OverrideRules(unittest.TestCase):
         self.assertEqual(priority, 3)
 
     def test_take_profit_triggers_above_threshold(self):
-        """Rule 1: profit > take_profit_pct → SELL even when holdings >= threshold."""
+        """Rule 1: holdings >= threshold AND profit > take_profit_pct → SELL."""
         signal, priority = self.rebalancer._generate_signal(
             currency="BTC",
             ta_score=6,   # TA2 BUY (would normally buy)

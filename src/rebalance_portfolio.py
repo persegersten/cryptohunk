@@ -17,9 +17,9 @@ This module:
    - Optional: EMA_50 > EMA_200 filter blocks BUY if TA2_USE_EMA50_FILTER=true
    - HOLD otherwise
 5. Applies override rules:
-   - Rule 1: If profit > take_profit_percentage: SELL (highest priority, overrides TA)
+   - Rule 1: If holdings >= TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
    - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
-   - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1 applies)
+   - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
 6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
 7. Multiple BUYs allowed, sorted by priority then ta_score (highest first for BUY, most bearish first for SELL)
 8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
@@ -331,9 +331,9 @@ class RebalancePortfolio:
         - HOLD otherwise
 
         Portfolio override rules (applied first):
-        - Rule 1: If profit > take_profit_percentage: SELL (highest priority, overrides TA)
+        - Rule 1: If holdings >= TRADE_THRESHOLD AND profit > take_profit_percentage: SELL
         - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL
-        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell, unless Rule 1);
+        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell);
                   BUY is still evaluated so currencies without holdings can generate entry signals
 
         Args:
@@ -354,9 +354,12 @@ class RebalancePortfolio:
         take_profit_pct = self.cfg.take_profit_percentage
         stop_loss_pct = self.cfg.stop_loss_percentage
 
-        # Rule 1: If profit > take_profit_percentage, force SELL (highest priority, overrides TA)
-        if percentage_change > take_profit_pct:
-            log.info(f"{currency}: Profit > {take_profit_pct}% -> SELL (Rule 1 take profit)")
+        # Rule 1: If significant holdings are profitable, force SELL (highest priority, overrides TA)
+        if current_value_usdc >= trade_threshold and percentage_change > take_profit_pct:
+            log.info(
+                f"{currency}: Holdings >= TRADE_THRESHOLD and profit > {take_profit_pct}% "
+                "-> SELL (Rule 1 take profit)"
+            )
             return "SELL", 1
 
         # Check if holdings are below threshold
