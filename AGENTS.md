@@ -46,7 +46,7 @@ The bot operates in 5 main stages (can be run independently or chained):
 4. **Trade Plan Creation** (`--create-trade-plan`)
    - Converts recommendations into concrete trades
    - Calculates available funds after sells
-   - Generates exactly one BUY per cycle (if funds available)
+   - Generates up to two BUYs per cycle (if funds are available), splitting funds equally when both allocations exceed the trade threshold
    - Respects trade threshold minimums
 
 5. **Trade Execution** (`--execute-trades`)
@@ -142,7 +142,8 @@ cryptohunk/
 ### 8. Trade Plan Creation (`create_trade_plan.py`)
 - Processes SELL recommendations first
 - Calculates available liquid funds after sells
-- Executes **maximum ONE BUY per cycle** with available funds
+- Executes up to 2 BUYs with equal allocation when both allocations exceed TRADE_THRESHOLD
+- Falls back to 1 BUY when there is only one BUY candidate or when splitting funds would put allocations below TRADE_THRESHOLD
 - Only trades if amounts exceed TRADE_THRESHOLD
 
 ### 9. Trade Execution (`execute_trade_plan.py`)

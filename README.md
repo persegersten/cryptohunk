@@ -82,7 +82,7 @@ Two TA strategies are available:
 1. Take profit when holdings >= TRADE_THRESHOLD and gain > TAKE_PROFIT_PERCENTAGE
 2. Stop loss on large positions when loss > STOP_LOSS_PERCENTAGE
 3. No selling positions below TRADE_THRESHOLD
-4. Maximum one BUY per cycle
+4. Up to two BUYs per cycle, split equally when both allocations exceed TRADE_THRESHOLD; otherwise falls back to one BUY
 
 ## Testing
 
