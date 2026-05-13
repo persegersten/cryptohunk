@@ -21,6 +21,7 @@ from .execute_trade_plan import execute_trade_plan_main
 from .visualize_history import visualize_history_main
 from .ftp_upload import ftp_upload_main
 from .backtest import backtest_main
+from .optimize_risk_parameters import optimize_risk_parameters_main
 
 
 def main():
@@ -74,6 +75,11 @@ def main():
         "--backtest",
         action="store_true",
         help="Run historical simulation (backtesting) with TA2 and rebalancing on downloaded history data",
+    )
+    parser.add_argument(
+        "--optimize-risk-parameters",
+        action="store_true",
+        help="Optimize TAKE_PROFIT_PERCENTAGE and STOP_LOSS_PERCENTAGE per currency using downloaded history data",
     )
     args = parser.parse_args()
 
@@ -145,6 +151,10 @@ def main():
     if args.backtest:
         print("Starting historical simulation (Backtest)...")
         backtest_main(cfg)
+
+    if args.optimize_risk_parameters:
+        print("Optimizing risk parameters (OptimizeRiskParameters)...")
+        optimize_risk_parameters_main(cfg)
 
     if args.visualize:
         print("Generating price history chart (VisualizeHistory)...")

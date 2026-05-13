@@ -8,7 +8,7 @@ export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="1000"
 export TRADE_THRESHOLD="10"
 export TAKE_PROFIT_PERCENTAGE="3.0"
-export STOP_LOSS_PERCENTAGE="3.0"
+export STOP_LOSS_PERCENTAGE="2.0"
 
 #
 # sedan:
@@ -19,7 +19,7 @@ set -euo pipefail
 PYTHON=${PYTHON:-python3}
 
 echo "Running AssertEnv and main..."
-$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades --backtest --visualize --ftp-upload 2>&1 | tee "$LOG_FILE"
+$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades --backtest --optimize-risk-parameters --visualize --ftp-upload 2>&1 | tee "$LOG_FILE"
 
 exit_code=${PIPESTATUS[0]}
 set -e

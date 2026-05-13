@@ -9,6 +9,7 @@ Automated cryptocurrency trading bot with technical analysis and portfolio rebal
 - Portfolio summarization with P&L tracking
 - Automated rebalancing recommendations
 - Trade plan creation and execution
+- Per-currency take-profit/stop-loss optimization from historical data
 - Dry-run mode for safe testing
 
 ## Quick Start
@@ -34,6 +35,9 @@ python3 -m src.main --run-ta
 python3 -m src.main --rebalance-portfolio
 python3 -m src.main --create-trade-plan
 python3 -m src.main --execute-trades
+
+# Optional: optimize risk parameters from downloaded history
+python3 -m src.main --optimize-risk-parameters
 ```
 
 ## Configuration
@@ -83,6 +87,18 @@ Two TA strategies are available:
 2. Stop loss on large positions when loss > STOP_LOSS_PERCENTAGE
 3. No selling positions below TRADE_THRESHOLD
 4. Up to two BUYs per cycle, split equally when both allocations exceed TRADE_THRESHOLD; otherwise falls back to one BUY
+
+## Risk Parameter Optimization
+
+`--optimize-risk-parameters` runs after historical data is available. It reuses
+the same TA signal logic as live rebalancing, tests a fixed grid of
+take-profit and stop-loss percentages per currency, and simulates a long-only
+portfolio where BUY opens a position, TA SELL closes it, and take-profit or
+stop-loss can close it earlier. It writes the best historical combination to:
+
+```bash
+DATA_AREA_ROOT_DIR/output/risk_optimization/risk_parameters.csv
+```
 
 ## Testing
 
