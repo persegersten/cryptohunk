@@ -19,7 +19,7 @@ set -euo pipefail
 PYTHON=${PYTHON:-python3}
 
 echo "Running AssertEnv and main..."
-$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades --backtest --optimize-risk-parameters --visualize --ftp-upload 2>&1 | tee "$LOG_FILE"
+$PYTHON -m src.main "$@" --clean-data --collect-data --run-ta --rebalance-portfolio --create-trade-plan --execute-trades --backtest --visualize --ftp-upload 2>&1 | tee "$LOG_FILE"
 
 exit_code=${PIPESTATUS[0]}
 set -e
