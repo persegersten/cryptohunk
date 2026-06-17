@@ -80,6 +80,24 @@ class TestCollectData(unittest.TestCase):
 
             collector._get_trades_for_symbol.assert_called_once_with("BTCUSDC")
 
+    def test_testnet_config_uses_testnet_base_url_for_history(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _cfg(tmpdir)
+            cfg.binance_api_env = "testnet"
+            cfg.binance_base_url = "https://testnet.binance.vision"
+
+            response = Mock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = []
+
+            with patch("src.collect_data.requests.get", return_value=response) as mock_get:
+                CollectData(cfg).collect_currency_rate_history()
+
+            self.assertEqual(
+                mock_get.call_args.args[0],
+                "https://testnet.binance.vision/api/v3/klines",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

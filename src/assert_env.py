@@ -3,13 +3,16 @@ AssertEnv - verifiera att nödvändiga env-variabler finns och bygg Config-objek
 
 Miljövariabler som hanteras:
 - CURRENCIES (kommaseparerad lista, ex "BNB,ETH,SOL")
-- BINANCE_SECRET
-- BINANCE_KEY
-- BINANCE_BASE_URL (om ej satt används https://api.binance.com)
+- BINANCE_API_ENV (live/testnet, default: live)
+- BINANCE_SECRET och BINANCE_KEY (krävs i live-läge)
+- BINANCE_TESTNET_SECRET och BINANCE_TESTNET_KEY (krävs i testnet-läge)
+- BINANCE_BASE_URL (live, om ej satt används https://api.binance.com)
+- BINANCE_TESTNET_BASE_URL (testnet, om ej satt används https://testnet.binance.vision)
 - BINANCE_CURRENCY_HISTORY_ENDPOINT (om ej satt används "/api/v3/klines")
 - BINANCE_EXCHANGE_INFO_ENDPOINT (om ej satt används "/api/v3/exchangeInfo")
 - BINANCE_MY_TRADES_ENDPOINT (om ej satt används "/api/v3/myTrades")
-- BINANCE_TRADING_URL (måste sättas)
+- BINANCE_TRADING_URL (krävs i live-läge)
+- BINANCE_TRADING_TESTNET_URL (krävs i testnet-läge)
 - DRY_RUN (valfritt, true/false)
 - DATA_AREA_ROOT_DIR (måste sättas)
 - CURRENCY_HISTORY_PERIOD (måste sättas)
@@ -45,6 +48,7 @@ def load_config_from_env() -> Config:
     # defaults
     defaults = {
         "BINANCE_BASE_URL": "https://api.binance.com",
+        "BINANCE_TESTNET_BASE_URL": "https://testnet.binance.vision",
         "BINANCE_CURRENCY_HISTORY_ENDPOINT": "/api/v3/klines",
         "BINANCE_EXCHANGE_INFO_ENDPOINT": "/api/v3/exchangeInfo",
         "BINANCE_MY_TRADES_ENDPOINT": "/api/v3/myTrades",
@@ -54,16 +58,26 @@ def load_config_from_env() -> Config:
 
     missing = []
 
-    # Required (must be present)
+    binance_api_env = env.get("BINANCE_API_ENV", "live").strip().lower()
+    if binance_api_env not in ("live", "testnet"):
+        raise EnvironmentError("BINANCE_API_ENV must be either 'live' or 'testnet'.")
+
+    # Required common settings (must be present)
     required_keys = [
         "CURRENCIES",
-        "BINANCE_SECRET",
-        "BINANCE_KEY",
-        "BINANCE_TRADING_URL",
         "DATA_AREA_ROOT_DIR",
         "CURRENCY_HISTORY_PERIOD",
         "CURRENCY_HISTORY_NOF_ELEMENTS",
     ]
+
+    if binance_api_env == "live":
+        required_keys.extend(["BINANCE_SECRET", "BINANCE_KEY", "BINANCE_TRADING_URL"])
+    else:
+        required_keys.extend([
+            "BINANCE_TESTNET_SECRET",
+            "BINANCE_TESTNET_KEY",
+            "BINANCE_TRADING_TESTNET_URL",
+        ])
 
     for k in required_keys:
         if not env.get(k):
@@ -79,9 +93,19 @@ def load_config_from_env() -> Config:
     if not currencies:
         raise EnvironmentError("CURRENCIES must contain at least one currency.")
 
-    binance_secret = env.get("BINANCE_SECRET", "").strip()
-    binance_key = env.get("BINANCE_KEY", "").strip()
-    binance_trading_url = env.get("BINANCE_TRADING_URL", "").strip()
+    if binance_api_env == "live":
+        binance_secret = env.get("BINANCE_SECRET", "").strip()
+        binance_key = env.get("BINANCE_KEY", "").strip()
+        binance_trading_url = env.get("BINANCE_TRADING_URL", "").strip()
+        binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
+    else:
+        binance_secret = env.get("BINANCE_TESTNET_SECRET", "").strip()
+        binance_key = env.get("BINANCE_TESTNET_KEY", "").strip()
+        binance_trading_url = env.get("BINANCE_TRADING_TESTNET_URL", "").strip()
+        binance_base_url = env.get(
+            "BINANCE_TESTNET_BASE_URL", defaults["BINANCE_TESTNET_BASE_URL"]
+        ).strip()
+
     data_area_root_dir = env.get("DATA_AREA_ROOT_DIR", "").strip()
     currency_history_period = env.get("CURRENCY_HISTORY_PERIOD", "").strip()
 
@@ -109,7 +133,6 @@ def load_config_from_env() -> Config:
     dry_run = _parse_bool(env.get("DRY_RUN", "false"))
     ta2_use_ema50_filter = _parse_bool(env.get("TA2_USE_EMA50_FILTER", "false"))
 
-    binance_base_url = env.get("BINANCE_BASE_URL", defaults["BINANCE_BASE_URL"]).strip()
     binance_currency_history_endpoint = env.get(
         "BINANCE_CURRENCY_HISTORY_ENDPOINT", defaults["BINANCE_CURRENCY_HISTORY_ENDPOINT"]
     ).strip()
@@ -152,6 +175,7 @@ def load_config_from_env() -> Config:
         ftp_username=ftp_username,
         ftp_password=ftp_password,
         ftp_html_regexp=ftp_html_regexp,
+        binance_api_env=binance_api_env,
         ta2_use_ema50_filter=ta2_use_ema50_filter,
         raw_env={k: env.get(k) for k in list(env.keys())},
     )
@@ -169,6 +193,7 @@ def assert_env_and_report() -> Config:
     # Minimal rapport (inga hemliga värden skrivs ut)
     print("AssertEnv: environment variables validated.")
     print(f" - currencies: {', '.join(cfg.currencies)}")
+    print(f" - binance_api_env: {cfg.binance_api_env}")
     print(f" - binance_base_url: {cfg.binance_base_url}")
     print(f" - data_area_root_dir: {cfg.data_area_root_dir}")
     print(f" - currency_history_period: {cfg.currency_history_period}")

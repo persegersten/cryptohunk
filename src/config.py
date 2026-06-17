@@ -26,4 +26,5 @@ class Config:
     ftp_password: Optional[str]
     ftp_html_regexp: Optional[str]
     raw_env: dict
+    binance_api_env: str = "live"
     ta2_use_ema50_filter: bool = False

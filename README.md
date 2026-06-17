@@ -20,9 +20,20 @@ pip install -r requirements.txt
 
 # Set required environment variables
 export CURRENCIES="BTC,ETH,SOL"
+
+# Choose active Binance profile: live or testnet
+export BINANCE_API_ENV="testnet"
+
+# Live Binance profile
 export BINANCE_KEY="your_api_key"
 export BINANCE_SECRET="your_api_secret"
-export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
+export BINANCE_TRADING_URL="https://api.binance.com/api/v3/order"
+
+# Spot Testnet Binance profile
+export BINANCE_TESTNET_KEY="your_testnet_api_key"
+export BINANCE_TESTNET_SECRET="your_testnet_api_secret"
+export BINANCE_TRADING_TESTNET_URL="https://testnet.binance.vision/api/v3/order"
+
 export DATA_AREA_ROOT_DIR="/path/to/data"
 export CURRENCY_HISTORY_PERIOD="1h"
 export CURRENCY_HISTORY_NOF_ELEMENTS="300"
@@ -44,14 +55,20 @@ python3 -m src.main --optimize-risk-parameters
 
 ### Required Variables
 - `CURRENCIES` - Comma-separated list (e.g., "BTC,ETH,SOL")
-- `BINANCE_KEY` - Binance API key
-- `BINANCE_SECRET` - Binance API secret
-- `BINANCE_TRADING_URL` - Binance trading URL
+- `BINANCE_API_ENV` - Active Binance profile: `live` or `testnet` (default: `live`)
+- `BINANCE_KEY` - Live Binance API key, required when `BINANCE_API_ENV=live`
+- `BINANCE_SECRET` - Live Binance API secret, required when `BINANCE_API_ENV=live`
+- `BINANCE_TRADING_URL` - Live Binance trading URL, required when `BINANCE_API_ENV=live`
+- `BINANCE_TESTNET_KEY` - Spot Testnet API key, required when `BINANCE_API_ENV=testnet`
+- `BINANCE_TESTNET_SECRET` - Spot Testnet API secret, required when `BINANCE_API_ENV=testnet`
+- `BINANCE_TRADING_TESTNET_URL` - Spot Testnet trading URL, required when `BINANCE_API_ENV=testnet`
 - `DATA_AREA_ROOT_DIR` - Data storage path
 - `CURRENCY_HISTORY_PERIOD` - History period (e.g., "1h")
 - `CURRENCY_HISTORY_NOF_ELEMENTS` - Number of historical data points
 
 ### Optional Variables (with defaults)
+- `BINANCE_BASE_URL` - Live REST base URL (default: `https://api.binance.com`)
+- `BINANCE_TESTNET_BASE_URL` - Spot Testnet REST base URL (default: `https://testnet.binance.vision`)
 - `TRADE_THRESHOLD` - Minimum trade value in USDC (default: 10.0)
 - `TAKE_PROFIT_PERCENTAGE` - Profit target (default: 10.0%)
 - `STOP_LOSS_PERCENTAGE` - Loss limit (default: 6.0%)
@@ -109,3 +126,5 @@ python3 -m unittest discover tests
 ## Safety
 
 Always use `DRY_RUN=true` for testing. Real trading involves financial risk.
+`BINANCE_API_ENV=testnet` uses Binance Spot Testnet with separate API keys and
+virtual funds; Binance may periodically reset Testnet data.

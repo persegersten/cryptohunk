@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 
 export CURRENCIES="BTC,ETH,SOL"
-export BINANCE_TRADING_URL="https://www.binance.com/api/v3/order"
+export BINANCE_API_ENV="${BINANCE_API_ENV:-live}"
+
+export BINANCE_TRADING_URL="https://api.binance.com/api/v3/order"
+export BINANCE_TRADING_TESTNET_URL="https://testnet.binance.vision/api/v3/order"
+
 export DATA_AREA_ROOT_DIR="/tmp/cryptohunk_data"
 export LOG_FILE="/tmp/run.log"
 export CURRENCY_HISTORY_PERIOD="1h"

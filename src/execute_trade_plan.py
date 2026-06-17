@@ -4,7 +4,7 @@ ExecuteTradePlan - Execute trades from trade plan against Binance.
 
 This module:
 1. Reads trade plan from DATA_AREA_ROOT_DIR/output/rebalance/trade_plan.csv
-2. Validates exchange info from BINANCE_BASE_URL/BINANCE_EXCHANGE_INFO_ENDPOINT
+2. Validates exchange info from selected Binance live/testnet profile
 3. If DRY_RUN is true: logs trades without executing them
 4. If DRY_RUN is false: uses CCXTBroker to place buy/sell orders on Binance
 """
@@ -23,7 +23,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 class CCXTBroker:
     """CCXT-based broker for executing trades on Binance."""
     
-    def __init__(self, api_key: str, api_secret: str, base_url: str = "https://api.binance.com"):
+    def __init__(
+        self,
+        api_key: str,
+        api_secret: str,
+        base_url: str = "https://api.binance.com",
+        api_env: str = "live",
+    ):
         """
         Initialize CCXT broker for Binance.
         
@@ -31,7 +37,9 @@ class CCXTBroker:
             api_key: Binance API key
             api_secret: Binance API secret
             base_url: Binance base URL (default: https://api.binance.com)
+            api_env: Binance environment ("live" or "testnet")
         """
+        self.api_env = (api_env or "live").lower()
         self.exchange = ccxt.binance({
             'apiKey': api_key,
             'secret': api_secret,
@@ -41,9 +49,12 @@ class CCXTBroker:
                 'defaultType': 'spot'
             }
         })
-        
-        # Set custom base URL if different from default
-        if base_url and base_url != "https://api.binance.com":
+
+        if self.api_env == "testnet":
+            self.exchange.set_sandbox_mode(True)
+
+        # Set custom live base URL if different from default.
+        if self.api_env == "live" and base_url and base_url != "https://api.binance.com":
             self.exchange.urls['api'] = base_url
     
     def fetch_exchange_info(self) -> dict:
@@ -141,11 +152,12 @@ class ExecuteTradePlan:
     def _init_broker(self) -> None:
         """Initialize CCXT broker if not in dry run mode."""
         if not self.cfg.dry_run and self.broker is None:
-            log.info("Initializing CCXTBroker for live trading")
+            log.info("Initializing CCXTBroker for Binance %s trading", self.cfg.binance_api_env)
             self.broker = CCXTBroker(
                 api_key=self.cfg.binance_key,
                 api_secret=self.cfg.binance_secret,
-                base_url=self.cfg.binance_base_url
+                base_url=self.cfg.binance_base_url,
+                api_env=self.cfg.binance_api_env,
             )
     
     def _validate_exchange_info(self) -> bool:
@@ -274,6 +286,7 @@ class ExecuteTradePlan:
             True if all trades executed successfully, False otherwise
         """
         log.info("=== Starting trade execution ===")
+        log.info("Binance environment: %s", self.cfg.binance_api_env)
         
         # Validate exchange info
         if not self._validate_exchange_info():

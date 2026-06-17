@@ -269,11 +269,13 @@ class TestCCXTBroker(unittest.TestCase):
             broker = CCXTBroker(
                 api_key="test_key",
                 api_secret="test_secret",
-                base_url="https://api.binance.com"
+                base_url="https://api.binance.com",
+                api_env="live",
             )
             
             self.assertIsNotNone(broker.exchange)
             mock_binance.assert_called_once()
+            mock_exchange.set_sandbox_mode.assert_not_called()
     
     def test_ccxt_broker_time_synchronization(self):
         """Test that CCXTBroker is initialized with time synchronization enabled."""
@@ -284,7 +286,8 @@ class TestCCXTBroker(unittest.TestCase):
             broker = CCXTBroker(
                 api_key="test_key",
                 api_secret="test_secret",
-                base_url="https://api.binance.com"
+                base_url="https://api.binance.com",
+                api_env="live",
             )
             
             # Verify that adjustForTimeDifference is set to True
@@ -299,6 +302,62 @@ class TestCCXTBroker(unittest.TestCase):
                               "adjustForTimeDifference should be True to fix timestamp sync issues")
             else:
                 self.fail("ccxt.binance was not called with expected arguments")
+
+    def test_ccxt_broker_testnet_enables_sandbox_mode(self):
+        """Test that testnet mode enables CCXT sandbox mode."""
+        with patch('src.execute_trade_plan.ccxt.binance') as mock_binance:
+            mock_exchange = MagicMock()
+            mock_binance.return_value = mock_exchange
+
+            broker = CCXTBroker(
+                api_key="testnet_key",
+                api_secret="testnet_secret",
+                base_url="https://testnet.binance.vision",
+                api_env="testnet",
+            )
+
+            self.assertIsNotNone(broker.exchange)
+            mock_exchange.set_sandbox_mode.assert_called_once_with(True)
+
+    def test_init_broker_passes_selected_binance_env(self):
+        """Test that ExecuteTradePlan passes the selected environment to CCXTBroker."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = Config(
+                currencies=["BTC"],
+                binance_secret="testnet_secret",
+                binance_key="testnet_key",
+                binance_base_url="https://testnet.binance.vision",
+                binance_currency_history_endpoint="/api/v3/klines",
+                binance_exchange_info_endpoint="/api/v3/exchangeInfo",
+                binance_my_trades_endpoint="/api/v3/myTrades",
+                binance_trading_url="https://testnet.binance.vision/api/v3/order",
+                dry_run=False,
+                data_area_root_dir=tmpdir,
+                currency_history_period="1h",
+                currency_history_nof_elements=300,
+                trade_threshold=100.0,
+                take_profit_percentage=10.0,
+                stop_loss_percentage=6.0,
+                allowed_quote_assets=["USDC"],
+                ftp_host=None,
+                ftp_dir=None,
+                ftp_username=None,
+                ftp_password=None,
+                ftp_html_regexp=None,
+                raw_env={},
+                binance_api_env="testnet",
+            )
+
+            with patch('src.execute_trade_plan.CCXTBroker') as mock_broker:
+                executor = ExecuteTradePlan(cfg)
+                executor._init_broker()
+
+            mock_broker.assert_called_once_with(
+                api_key="testnet_key",
+                api_secret="testnet_secret",
+                base_url="https://testnet.binance.vision",
+                api_env="testnet",
+            )
 
     def test_trade_plan_format_requires_usdc(self):
         """
