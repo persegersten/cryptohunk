@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export CURRENCIES="BTC,ETH,SOL"
-export BINANCE_API_ENV="${BINANCE_API_ENV:-live}"
+export BINANCE_API_ENV="${BINANCE_API_ENV:-live}"  # live eller testnet
 
 export BINANCE_TRADING_URL="https://api.binance.com/api/v3/order"
 export BINANCE_TRADING_TESTNET_URL="https://testnet.binance.vision/api/v3/order"
