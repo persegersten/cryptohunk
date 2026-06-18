@@ -84,6 +84,13 @@ def _create_portfolio_json(data_root: Path, balances: dict) -> None:
         json.dump(payload, f)
 
 
+def _create_recommendations_csv(data_root: Path, rows: list) -> None:
+    """Create a minimal rebalance recommendations.csv for overview tests."""
+    output_dir = data_root / "output" / "rebalance"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(output_dir / "recommendations.csv", index=False)
+
+
 class TestVisualizeHistory(unittest.TestCase):
 
     def setUp(self):
@@ -237,11 +244,10 @@ class TestVisualizeHistory(unittest.TestCase):
         self.assertIsNotNone(html_content)
 
         self.assertIn("plotly", html_content.lower())
-        # Trade data is unicode-escaped by Plotly; check for unescaped identifiers
+        # Trade data encoding differs between Plotly versions; check stable content.
         self.assertIn("BTCUSDC", html_content)
-        # Check that both buy and sell trace names are present (unicode-escaped)
-        self.assertIn('"name":"K\\u00f6p"', html_content)
-        self.assertIn('"name":"S\\u00e4lj"', html_content)
+        self.assertTrue('"name":"K\\u00f6p"' in html_content or '"name":"Köp"' in html_content)
+        self.assertTrue('"name":"S\\u00e4lj"' in html_content or '"name":"Sälj"' in html_content)
 
     def test_generate_chart_sell_label_includes_pct_change_vs_buy(self):
         """Sell marker label must include percentage change vs. the preceding buy."""
@@ -266,9 +272,10 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", trades)
         self.assertIsNotNone(html_content)
-        # Plotly unicode-escapes non-ASCII, so check for the escaped form
-        # "F\u00f6r\u00e4ndring vs. k\u00f6p" = "Förändring vs. köp"
-        self.assertIn("F\\u00f6r\\u00e4ndring vs. k\\u00f6p", html_content)
+        self.assertTrue(
+            "F\\u00f6r\\u00e4ndring vs. k\\u00f6p" in html_content
+            or "Förändring vs. köp" in html_content
+        )
         self.assertIn("+5.00%", html_content)
 
     def test_generate_chart_without_trades(self):
@@ -286,9 +293,12 @@ class TestVisualizeHistory(unittest.TestCase):
         viz = VisualizeHistory(self.cfg)
         html_content = viz.generate_chart("BTC", [])
         self.assertIsNotNone(html_content)
-        # Expected buttons (Plotly unicode-escapes Swedish characters)
+        # Expected buttons (encoding differs between Plotly versions)
         self.assertIn('"label":"Senaste veckan"', html_content)
-        self.assertIn('"label":"Senaste m\\u00e5naden"', html_content)
+        self.assertTrue(
+            '"label":"Senaste m\\u00e5naden"' in html_content
+            or '"label":"Senaste månaden"' in html_content
+        )
         self.assertIn('"label":"Allt"', html_content)
         # "3 månader" button must be absent
         self.assertNotIn('"label":"3', html_content)
@@ -1021,6 +1031,31 @@ class TestVisualizeHistory(unittest.TestCase):
         dfs = {"BTC": viz._read_history("BTC")}
         html = viz.generate_summary_html([], dfs)
         self.assertIn("KÖP", html)
+
+    def test_generate_summary_html_shows_rebalance_decision_steps(self):
+        """Overview should show TA, risk, liquidity, and decision steps separately."""
+        hist_dir = self.data_root / "history"
+        _create_history_csv(hist_dir, "BTC", n=10)
+        _create_portfolio_json(self.data_root, {"BTC": 1.0, "USDC": 100.0})
+        _create_recommendations_csv(self.data_root, [{
+            "currency": "BTC",
+            "ta_step": "SELL",
+            "risk_step": "NONE",
+            "liquidity_step": "BLOCK_SELL_BELOW_THRESHOLD",
+            "decision_step": "HOLD",
+        }])
+
+        viz = VisualizeHistory(self.cfg)
+        dfs = {"BTC": viz._read_history("BTC")}
+        html = viz.generate_summary_html([], dfs)
+
+        self.assertIn("TA-steg", html)
+        self.assertIn("Risk-steg", html)
+        self.assertIn("Likviditets-steg", html)
+        self.assertIn("Besluts-steg", html)
+        self.assertIn("SELL", html)
+        self.assertIn("BLOCK_SELL_BELOW_THRESHOLD", html)
+        self.assertIn("HOLD", html)
 
     def test_generate_summary_html_shows_latest_trades(self):
         """The ten most recent trades should appear in the summary trades table."""

@@ -11,15 +11,15 @@ This module:
    - RSI constructive zone (+1) or weak/overheated (-1)
    - Chase protection (-1 if price too extended above EMA_21)
    Score range approximately -8 to +8. Higher = more bullish.
-4. Derives signal from graded score and explicit exit rule:
+4. Derives a separate TA step from graded score and explicit exit rule:
    - BUY when ta_score >= 5 (strong bullish setup, requires trend + momentum)
    - SELL when MACD < MACD_Signal (exit rule preserved from original strategy)
    - Optional: EMA_50 > EMA_200 filter blocks BUY if TA2_USE_EMA50_FILTER=true
    - HOLD otherwise
-5. Applies override rules:
-   - Rule 1: If holdings >= TRADE_THRESHOLD AND profit > take_profit_percentage: SELL (highest priority, overrides TA)
-   - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL (high priority, overrides TA)
-   - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell)
+5. Calculates risk, liquidity, and final decision steps separately:
+   - Risk: take-profit / stop-loss recommendations
+   - Liquidity: TRADE_THRESHOLD pass/block status
+   - Decision: final BUY/SELL/HOLD outcome after priorities
 6. TA is calculated for all configured currencies, even those without holdings (to enable BUY signals)
 7. Multiple BUYs allowed, sorted by priority then ta_score (highest first for BUY, most bearish first for SELL)
 8. Saves recommendations to DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
@@ -43,6 +43,21 @@ class RebalancePortfolio:
     # Requires at minimum Close > EMA_200 (+2) and MACD > Signal (+2) plus
     # at least one additional bullish component.
     _BUY_THRESHOLD = 5
+    _RECOMMENDATION_FIELDNAMES = [
+        'currency',
+        'current_value_usdc',
+        'percentage_change',
+        'ta_score',
+        'ta_step',
+        'ta_reason',
+        'risk_step',
+        'risk_action',
+        'liquidity_step',
+        'liquidity_pass',
+        'decision_step',
+        'decision_reason',
+        'priority',
+    ]
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -319,70 +334,117 @@ class RebalancePortfolio:
 
         return 1
 
-    def _generate_signal(self, currency: str, ta_score: int,
-                        current_value_usdc: float, percentage_change: float,
-                        macd_sell: bool, ema50_blocks_buy: bool = False) -> tuple:
-        """
-        Generate BUY/SELL/HOLD signal based on continuous TA score and portfolio rules.
+    def _calculate_ta_step(self, ta_score: int, macd_sell: bool,
+                           ema50_blocks_buy: bool = False) -> tuple:
+        """Calculate the pure TA recommendation before portfolio rules."""
+        if macd_sell:
+            return "SELL", "macd_or_ema21_exit"
 
-        Signal is derived from the graded ta_score and the explicit exit rules:
-        - SELL when MACD < MACD_Signal OR Close < EMA_21 (exit rule, only for significant holdings)
-        - BUY when ta_score >= _BUY_THRESHOLD and not blocked by EMA50 filter
-        - HOLD otherwise
+        if ta_score >= self._BUY_THRESHOLD:
+            if ema50_blocks_buy:
+                return "HOLD", "ema50_filter_blocks_buy"
+            return "BUY", f"score>={self._BUY_THRESHOLD}"
 
-        Portfolio override rules (applied first):
-        - Rule 1: If holdings >= TRADE_THRESHOLD AND profit > take_profit_percentage: SELL
-        - Rule 2: If holdings >= TRADE_THRESHOLD AND loss > stop_loss_percentage: SELL
-        - Rule 3: If holdings < TRADE_THRESHOLD: no SELL (even if TA says sell);
-                  BUY is still evaluated so currencies without holdings can generate entry signals
+        return "HOLD", "neutral"
 
-        Args:
-            currency: Currency symbol
-            ta_score: Continuous graded TA score (higher = more bullish)
-            current_value_usdc: Current value in USDC
-            percentage_change: Percentage change since last purchase
-            macd_sell: True if MACD < MACD_Signal or Close < EMA_21 (exit rule)
-            ema50_blocks_buy: True if EMA50 filter is enabled and blocks BUY
-
-        Returns:
-            Tuple of (signal, priority) where:
-            - signal: "BUY", "SELL", or "HOLD"
-            - priority: 1 for Rule 1 (take profit),
-                       2 for Rule 2 (stop loss), 3 for TA-based
-        """
+    def _calculate_risk_step(self, current_value_usdc: float,
+                             percentage_change: float) -> tuple:
+        """Calculate take-profit / stop-loss recommendation separately from TA."""
         trade_threshold = self.cfg.trade_threshold
         take_profit_pct = self.cfg.take_profit_percentage
         stop_loss_pct = self.cfg.stop_loss_percentage
 
-        # Rule 1: If significant holdings are profitable, force SELL (highest priority, overrides TA)
         if current_value_usdc >= trade_threshold and percentage_change > take_profit_pct:
-            log.info(
-                f"{currency}: Holdings >= TRADE_THRESHOLD and profit > {take_profit_pct}% "
-                "-> SELL (Rule 1 take profit)"
-            )
-            return "SELL", 1
+            return "TAKE_PROFIT", "SELL"
 
-        # Check if holdings are below threshold
-        if current_value_usdc < trade_threshold:
-            # Rule 3: If holdings < TRADE_THRESHOLD, no SELL (even if TA says sell)
-            if macd_sell:
-                log.info(f"{currency}: Holdings < TRADE_THRESHOLD -> no SELL (Rule 3, despite TA exit, ta_score={ta_score})")
-                # Do not return here - still allow BUY signal to be evaluated below
+        if current_value_usdc >= trade_threshold and percentage_change < -stop_loss_pct:
+            return "STOP_LOSS", "SELL"
+
+        return "NONE", "HOLD"
+
+    def _calculate_liquidity_step(self, current_value_usdc: float,
+                                  candidate_action: str) -> tuple:
+        """Calculate TRADE_THRESHOLD status for the candidate action."""
+        if candidate_action == "SELL":
+            if current_value_usdc < self.cfg.trade_threshold:
+                return "BLOCK_SELL_BELOW_THRESHOLD", False
+            return "PASS", True
+
+        if candidate_action == "BUY":
+            return "BUY_FUNDS_PENDING", True
+
+        return "NONE", True
+
+    def _build_decision(self, currency: str, ta_score: int,
+                        current_value_usdc: float, percentage_change: float,
+                        macd_sell: bool, ema50_blocks_buy: bool = False) -> Dict:
+        """Build the full TA/risk/liquidity/decision trace for one currency."""
+        ta_step, ta_reason = self._calculate_ta_step(
+            ta_score, macd_sell, ema50_blocks_buy
+        )
+        risk_step, risk_action = self._calculate_risk_step(
+            current_value_usdc, percentage_change
+        )
+
+        if risk_action == "SELL":
+            candidate_action = "SELL"
+            priority = 1 if risk_step == "TAKE_PROFIT" else 2
+            decision_reason = f"{risk_step.lower()}_overrides_ta"
+        elif ta_step in ("BUY", "SELL"):
+            candidate_action = ta_step
+            priority = 3
+            decision_reason = f"ta_{ta_step.lower()}"
         else:
-            # Rule 2: If holdings >= TRADE_THRESHOLD and loss > stop_loss_percentage, force SELL (high priority)
-            if percentage_change < -stop_loss_pct:
-                log.info(f"{currency}: Loss > {stop_loss_pct}% -> SELL (Rule 2 stop loss)")
-                return "SELL", 2
+            candidate_action = "HOLD"
+            priority = 4
+            decision_reason = "no_action"
 
-            # Exit rule: MACD bearish OR Close < EMA_21 → SELL (only when holding significant amount)
-            if macd_sell:
-                return "SELL", 3
+        liquidity_step, liquidity_pass = self._calculate_liquidity_step(
+            current_value_usdc, candidate_action
+        )
 
-        # BUY if score indicates strong bullish setup and not blocked by EMA50 filter
-        if ta_score >= self._BUY_THRESHOLD and not ema50_blocks_buy:
-            return "BUY", 3
+        if not liquidity_pass:
+            decision_step = "HOLD"
+            priority = 0
+            decision_reason = "threshold_blocks_sell"
+        else:
+            decision_step = candidate_action
 
-        return "HOLD", 3
+        log.info(
+            "%s: TA=%s (%s), risk=%s/%s, liquidity=%s, decision=%s, priority=%s",
+            currency, ta_step, ta_reason, risk_step, risk_action,
+            liquidity_step, decision_step, priority,
+        )
+
+        return {
+            'currency': currency,
+            'current_value_usdc': f"{current_value_usdc:.2f}",
+            'percentage_change': f"{percentage_change:.2f}",
+            'ta_score': ta_score,
+            'ta_step': ta_step,
+            'ta_reason': ta_reason,
+            'risk_step': risk_step,
+            'risk_action': risk_action,
+            'liquidity_step': liquidity_step,
+            'liquidity_pass': str(liquidity_pass).lower(),
+            'decision_step': decision_step,
+            'decision_reason': decision_reason,
+            'priority': priority,
+        }
+
+    def _generate_signal(self, currency: str, ta_score: int,
+                        current_value_usdc: float, percentage_change: float,
+                        macd_sell: bool, ema50_blocks_buy: bool = False) -> tuple:
+        """
+        Backward-compatible wrapper returning only final action and priority.
+        New code should use _build_decision() and the explicit step columns.
+        """
+        decision = self._build_decision(
+            currency, ta_score, current_value_usdc, percentage_change,
+            macd_sell, ema50_blocks_buy
+        )
+        priority = 3 if decision['decision_step'] == 'HOLD' else decision['priority']
+        return decision['decision_step'], priority
 
     def generate_recommendations(self) -> List[Dict]:
         """
@@ -433,24 +495,16 @@ class RebalancePortfolio:
             # Extract signal context (MACD sell condition, EMA50 filter)
             macd_sell, ema50_blocks_buy = self._extract_signal_context(ta_df)
             
-            # Generate signal with priority
-            signal, priority = self._generate_signal(
+            # Generate full decision trace
+            recommendation = self._build_decision(
                 currency_upper, ta_score, current_value_usdc, percentage_change,
                 macd_sell=macd_sell, ema50_blocks_buy=ema50_blocks_buy
             )
-            
-            # Create recommendation
-            recommendation = {
-                'currency': currency_upper,
-                'percentage_change': f"{percentage_change:.2f}",
-                'ta_score': ta_score,
-                'signal': signal,
-                'priority': priority,
-            }
-            
+
             recommendations.append(recommendation)
             log.info(f"{currency_upper}: TA score={ta_score}, value={current_value_usdc:.2f} USDC, "
-                    f"change={percentage_change:.2f}%, signal={signal}, priority={priority}")
+                    f"change={percentage_change:.2f}%, decision={recommendation['decision_step']}, "
+                    f"priority={recommendation['priority']}")
         
         return recommendations
 
@@ -468,33 +522,36 @@ class RebalancePortfolio:
             recommendations: List of all recommendations
         
         Returns:
-            Sorted list of recommendations (excluding HOLD)
+            Sorted list of recommendations, with active decisions first and HOLD last
         """
-        # Filter out HOLD signals
-        active_recommendations = [r for r in recommendations if r['signal'] != 'HOLD']
-        
-        if not active_recommendations:
-            return []
-        
         # Sort by:
         # 1. Priority ascending (1=Rule 1 comes first)
         # 2. BUY before SELL within same priority (signal_order: BUY=0, SELL=1)
         # 3. BUY: highest ta_score first (-ta_score ascending)
         #    SELL: lowest ta_score first (ta_score ascending)
+        # 4. HOLD rows last for visibility in the decision report
         def _sort_key(rec):
-            if rec['signal'] == 'BUY':
-                return (rec['priority'], 0, -rec['ta_score'])
-            else:  # SELL
-                return (rec['priority'], 1, rec['ta_score'])
+            action = rec.get('decision_step', rec.get('signal', 'HOLD'))
+            if action == 'BUY':
+                return (0, rec['priority'], 0, -rec['ta_score'])
+            if action == 'SELL':
+                return (0, rec['priority'], 1, rec['ta_score'])
+            return (1, rec['priority'], 2, rec['currency'])
 
-        active_recommendations.sort(key=_sort_key)
+        sorted_recommendations = list(recommendations)
+        sorted_recommendations.sort(key=_sort_key)
         
-        log.info(f"Selected {len(active_recommendations)} recommendations after filtering HOLD signals")
-        for rec in active_recommendations:
-            log.info(f"  {rec['signal']}: {rec['currency']} "
+        active_count = sum(
+            1 for r in sorted_recommendations
+            if r.get('decision_step', r.get('signal', 'HOLD')) != 'HOLD'
+        )
+        log.info(f"Selected {active_count} active decisions; keeping HOLD rows in report")
+        for rec in sorted_recommendations:
+            action = rec.get('decision_step', rec.get('signal', 'HOLD'))
+            log.info(f"  {action}: {rec['currency']} "
                     f"(priority={rec['priority']}, ta_score={rec['ta_score']})")
         
-        return active_recommendations
+        return sorted_recommendations
 
     def save_recommendations(self, recommendations: List[Dict]) -> bool:
         """
@@ -514,28 +571,15 @@ class RebalancePortfolio:
                 log.warning("No recommendations to save")
                 # Create empty file with headers
                 with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                    fieldnames = ['currency', 'percentage_change', 'ta_score', 'signal']
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer = csv.DictWriter(f, fieldnames=self._RECOMMENDATION_FIELDNAMES)
                     writer.writeheader()
                 log.info(f"Created empty recommendations file: {output_file}")
                 return True
             
-            # Remove internal fields before saving
-            output_recommendations = []
-            for rec in recommendations:
-                output_rec = {
-                    'currency': rec['currency'],
-                    'percentage_change': rec['percentage_change'],
-                    'ta_score': rec['ta_score'],
-                    'signal': rec['signal']
-                }
-                output_recommendations.append(output_rec)
-            
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                fieldnames = ['currency', 'percentage_change', 'ta_score', 'signal']
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(f, fieldnames=self._RECOMMENDATION_FIELDNAMES)
                 writer.writeheader()
-                writer.writerows(output_recommendations)
+                writer.writerows(recommendations)
             
             log.info(f"Saved {len(recommendations)} recommendations to: {output_file}")
             return True
@@ -561,7 +605,7 @@ class RebalancePortfolio:
                 log.warning("No recommendations generated")
                 return self.save_recommendations([])
             
-            # Select and sort final recommendations
+            # Sort the decision report while keeping HOLD rows visible
             final_recommendations = self._select_final_recommendations(all_recommendations)
             
             # Save to file

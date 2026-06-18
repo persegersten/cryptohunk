@@ -366,6 +366,38 @@ class VisualizeHistory:
         last_signal = str(bt_df.iloc[-1]["signal"]).strip().upper()
         return _SIGNAL_MAP.get(last_signal, "–")
 
+    def _read_rebalance_decisions(self) -> Dict[str, Dict[str, str]]:
+        """
+        Läs rebalanseringens beslutsrapport för Overview-tabben.
+
+        Returnerar en dict per valuta med visningsklara värden för TA-, risk-,
+        likviditets- och beslutsstegen. Saknad fil ger tom dict.
+        """
+        recommendations_file = self.data_root / "output" / "rebalance" / "recommendations.csv"
+        if not recommendations_file.exists():
+            return {}
+
+        try:
+            df = pd.read_csv(recommendations_file)
+        except Exception as e:
+            log.warning("Could not read rebalance decisions for overview: %s", e)
+            return {}
+
+        decisions: Dict[str, Dict[str, str]] = {}
+        for _, row in df.iterrows():
+            currency = str(row.get("currency", "")).strip().upper()
+            if not currency:
+                continue
+            decision_step = str(row.get("decision_step", row.get("signal", "–"))).strip().upper()
+            decisions[currency] = {
+                "ta_step": str(row.get("ta_step", "–")).strip() or "–",
+                "risk_step": str(row.get("risk_step", "–")).strip() or "–",
+                "liquidity_step": str(row.get("liquidity_step", "–")).strip() or "–",
+                "decision_step": decision_step or "–",
+            }
+
+        return decisions
+
     def _build_portfolio_performance(
         self,
         trades: List[Dict[str, Any]],
@@ -621,6 +653,8 @@ class VisualizeHistory:
             except Exception as e:
                 log.warning("Could not read portfolio balances for summary: %s", e)
 
+        rebalance_decisions = self._read_rebalance_decisions()
+
         # Build holdings table rows
         holdings_rows = []
         for currency in self.cfg.currencies:
@@ -636,12 +670,22 @@ class VisualizeHistory:
                     usdc_value = holdings * latest_price
                 except (ValueError, TypeError, IndexError):
                     pass
-            signal = self._read_ta_signal(currency)
-            holdings_rows.append((currency_upper, holdings, latest_price, usdc_value, signal))
+            decision = rebalance_decisions.get(currency_upper, {})
+            ta_step = decision.get("ta_step", "–")
+            risk_step = decision.get("risk_step", "–")
+            liquidity_step = decision.get("liquidity_step", "–")
+            decision_step = decision.get("decision_step", "–")
+            if decision_step == "–":
+                # Backtest TA remains a fallback when no rebalance report exists.
+                ta_step = self._read_ta_signal(currency)
+            holdings_rows.append((
+                currency_upper, holdings, latest_price, usdc_value,
+                ta_step, risk_step, liquidity_step, decision_step,
+            ))
 
         # Add USDC row
         usdc_holdings = portfolio_balances.get("USDC", 0.0)
-        holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–"))
+        holdings_rows.append(("USDC", usdc_holdings, 1.0, usdc_holdings, "–", "–", "–", "–"))
 
         # Build latest-10-trades table from the single supported quote asset.
         usdc_trades = [
@@ -774,9 +818,10 @@ class VisualizeHistory:
         # Build HTML
         def _signal_td(signal: str) -> str:
             css = ""
-            if signal == "KÖP":
+            signal_upper = signal.upper()
+            if signal_upper in ("KÖP", "BUY"):
                 css = ' class="vh-sum-buy"'
-            elif signal == "SÄLJ":
+            elif signal_upper in ("SÄLJ", "SELL"):
                 css = ' class="vh-sum-sell"'
             return f"<td{css}>{signal}</td>"
 
@@ -787,7 +832,10 @@ class VisualizeHistory:
             return f"<td{css}>{pct}</td>"
 
         holdings_tbody = ""
-        for (cur, holdings, latest_price, usdc_value, signal) in holdings_rows:
+        for (
+            cur, holdings, latest_price, usdc_value,
+            ta_step, risk_step, liquidity_step, decision_step,
+        ) in holdings_rows:
             price_col = f"{latest_price:,.2f}" if latest_price else "–"
             holdings_tbody += (
                 "<tr>"
@@ -795,7 +843,10 @@ class VisualizeHistory:
                 f"<td>{holdings:.6f}</td>"
                 f"<td>{price_col}</td>"
                 f"<td>{usdc_value:,.2f}</td>"
-                f"{_signal_td(signal)}"
+                f"{_signal_td(ta_step)}"
+                f"<td>{risk_step}</td>"
+                f"<td>{liquidity_step}</td>"
+                f"{_signal_td(decision_step)}"
                 "</tr>\n"
             )
 
@@ -822,7 +873,8 @@ class VisualizeHistory:
             '<h2 class="vh-sum-h2">Portföljöversikt</h2>\n'
             '<table class="vh-sum-table">\n'
             "<thead><tr>"
-            "<th>Valuta</th><th>Innehav</th><th>Senaste kurs</th><th>Värde (USDC)</th><th>Senaste TA-signal</th>"
+            "<th>Valuta</th><th>Innehav</th><th>Senaste kurs</th><th>Värde (USDC)</th>"
+            "<th>TA-steg</th><th>Risk-steg</th><th>Likviditets-steg</th><th>Besluts-steg</th>"
             "</tr></thead>\n"
             f"<tbody>\n{holdings_tbody}</tbody>\n"
             "</table>\n"

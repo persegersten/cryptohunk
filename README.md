@@ -99,11 +99,27 @@ Two TA strategies are available:
 
 ## Rebalancing Rules
 
-**Trading Rules:**
-1. Take profit when holdings >= TRADE_THRESHOLD and gain > TAKE_PROFIT_PERCENTAGE
-2. Stop loss on large positions when loss > STOP_LOSS_PERCENTAGE
-3. No selling positions below TRADE_THRESHOLD
-4. Up to two BUYs per cycle, split equally when both allocations exceed TRADE_THRESHOLD; otherwise falls back to one BUY
+`DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv` is a decision report
+with one row per analyzed currency. It separates the trading logic into clear
+steps:
+
+1. `ta_step` - pure technical-analysis recommendation (`BUY`, `SELL`, `HOLD`)
+2. `risk_step` / `risk_action` - take-profit or stop-loss rule outcome
+3. `liquidity_step` - `TRADE_THRESHOLD` / minimum-size rule outcome
+4. `decision_step` - final `BUY`, `SELL`, or `HOLD` after priorities
+
+Rule priority is:
+1. Liquidity / minimum trade size (`TRADE_THRESHOLD`) has highest priority
+2. Take profit and stop loss override TA
+3. TA is the lowest-priority recommendation source
+
+`DATA_AREA_ROOT_DIR/output/rebalance/trade_plan.csv` is the executable order
+plan. It is created from `decision_step`, sells first, then uses available USDC
+for up to two BUYs per cycle. BUYs are split equally when both allocations exceed
+`TRADE_THRESHOLD`; otherwise the plan falls back to one BUY.
+
+The generated Overview page shows the same four steps in separate columns:
+`TA-steg`, `Risk-steg`, `Likviditets-steg`, and `Besluts-steg`.
 
 ## Risk Parameter Optimization
 

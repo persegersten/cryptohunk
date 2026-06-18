@@ -4,7 +4,7 @@ CreateTradePlan - Generate a trading plan based on portfolio and rebalance recom
 
 This module:
 1. Reads current portfolio from DATA_AREA_ROOT_DIR/summarised/portfolio.csv
-2. Reads rebalance recommendations from DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
+2. Reads rebalance decisions from DATA_AREA_ROOT_DIR/output/rebalance/recommendations.csv
 3. Generates trade plan based on rules:
    - Process SELL recommendations first: if value in USDC > TRADE_THRESHOLD, sell entire holding
    - Calculate liquid funds after SELLs
@@ -77,7 +77,7 @@ class CreateTradePlan:
             df = pd.read_csv(recommendations_file)
             if df.empty:
                 log.info("Recommendations file is empty")
-                return pd.DataFrame(columns=['currency', 'percentage_change', 'ta_score', 'signal'])
+                return pd.DataFrame(columns=['currency', 'decision_step'])
             return df
         except Exception as e:
             log.error(f"Failed to read recommendations: {e}")
@@ -129,9 +129,14 @@ class CreateTradePlan:
         
         trade_plan = []
         liquid_funds = self._get_liquid_funds(portfolio_df)
+        action_column = 'decision_step' if 'decision_step' in recommendations_df.columns else 'signal'
+
+        if action_column not in recommendations_df.columns:
+            log.error("Recommendations file must contain decision_step or signal column")
+            return []
         
         # Process SELL recommendations first
-        sell_recommendations = recommendations_df[recommendations_df['signal'] == 'SELL']
+        sell_recommendations = recommendations_df[recommendations_df[action_column] == 'SELL']
         
         for _, rec in sell_recommendations.iterrows():
             currency = rec['currency']
@@ -168,7 +173,7 @@ class CreateTradePlan:
         
         # Process BUY recommendations - only if liquid funds > threshold
         if liquid_funds > self.cfg.trade_threshold:
-            buy_recommendations = recommendations_df[recommendations_df['signal'] == 'BUY']
+            buy_recommendations = recommendations_df[recommendations_df[action_column] == 'BUY']
             
             if not buy_recommendations.empty:
                 # Take up to 2 BUY candidates (already sorted by priority in recommendations.csv)

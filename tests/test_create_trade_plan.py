@@ -85,12 +85,26 @@ class TestCreateTradePlan(unittest.TestCase):
     def _create_recommendations(self, recommendations_data: list):
         """Create a recommendations CSV file for testing."""
         recommendations_file = self.output_dir / "recommendations.csv"
-        
+        rows = []
+        for row in recommendations_data:
+            normalized = dict(row)
+            if 'decision_step' not in normalized and 'signal' in normalized:
+                normalized['decision_step'] = normalized['signal']
+            rows.append(normalized)
+
+        fieldnames = [
+            'currency', 'current_value_usdc', 'percentage_change', 'ta_score',
+            'ta_step', 'ta_reason', 'risk_step', 'risk_action',
+            'liquidity_step', 'liquidity_pass', 'decision_step',
+            'decision_reason', 'priority',
+        ]
+        if any('signal' in row for row in rows):
+            fieldnames.append('signal')
+
         with open(recommendations_file, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = ['currency', 'percentage_change', 'ta_score', 'signal']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(recommendations_data)
+            writer.writerows(rows)
 
     def _read_trade_plan(self) -> list:
         """Read the generated trade plan."""

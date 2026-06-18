@@ -149,6 +149,18 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(signal, "BUY")
         self.assertEqual(priority, 3)  # TA-based priority
 
+        decision = rebalancer._build_decision(
+            currency="BTC",
+            ta_score=6,
+            current_value_usdc=500.0,
+            percentage_change=5.0,
+            macd_sell=False
+        )
+        self.assertEqual(decision['ta_step'], "BUY")
+        self.assertEqual(decision['risk_step'], "NONE")
+        self.assertEqual(decision['liquidity_step'], "BUY_FUNDS_PENDING")
+        self.assertEqual(decision['decision_step'], "BUY")
+
     def test_generate_signal_sell(self):
         """Test SELL signal generation via MACD exit rule."""
         rebalancer = RebalancePortfolio(self.cfg)
@@ -211,6 +223,18 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 1)
         self.assertEqual(priority, 1)  # Rule 1 has highest priority
 
+        decision = rebalancer._build_decision(
+            currency="BTC",
+            ta_score=6,
+            current_value_usdc=500.0,
+            percentage_change=15.0,
+            macd_sell=False
+        )
+        self.assertEqual(decision['ta_step'], "BUY")
+        self.assertEqual(decision['risk_step'], "TAKE_PROFIT")
+        self.assertEqual(decision['risk_action'], "SELL")
+        self.assertEqual(decision['decision_step'], "SELL")
+
     def test_no_sell_below_threshold(self):
         """Test Rule 3: holdings < TRADE_THRESHOLD -> no SELL (even if MACD says sell)."""
         rebalancer = RebalancePortfolio(self.cfg)
@@ -227,26 +251,43 @@ class TestRebalancePortfolio(unittest.TestCase):
         self.assertEqual(signal, "HOLD")  # Should prevent SELL (Rule 3); ta_score too low to BUY
         self.assertEqual(priority, 3)  # TA-based priority
 
-    def test_buy_allowed_below_threshold_despite_macd_sell(self):
-        """Test Rule 3 fix: no holdings + macd_sell=True but strong ta_score -> BUY (not HOLD).
+        decision = rebalancer._build_decision(
+            currency="BTC",
+            ta_score=-4,
+            current_value_usdc=50.0,
+            percentage_change=5.0,
+            macd_sell=True
+        )
+        self.assertEqual(decision['ta_step'], "SELL")
+        self.assertEqual(decision['liquidity_step'], "BLOCK_SELL_BELOW_THRESHOLD")
+        self.assertEqual(decision['liquidity_pass'], "false")
+        self.assertEqual(decision['decision_step'], "HOLD")
 
-        When a currency has no holdings and macd_sell is triggered via ema21_exit
-        (Close < EMA_21 while MACD is still bullish), the graded ta_score can still
-        reach >= BUY_THRESHOLD. Rule 3 must only prevent SELL, not block BUY.
-        """
+    def test_ta_sell_below_threshold_is_blocked(self):
+        """TA SELL below threshold should be visible, then blocked by liquidity."""
         rebalancer = RebalancePortfolio(self.cfg)
         
-        # No holdings, strong bullish ta_score, but macd_sell=True (e.g. Close < EMA_21)
         signal, priority = rebalancer._generate_signal(
             currency="ETH",
-            ta_score=6,    # Score >= BUY_THRESHOLD (5)
-            current_value_usdc=0.0,   # No holdings
+            ta_score=6,
+            current_value_usdc=0.0,
             percentage_change=0.0,
-            macd_sell=True  # Triggered via Close < EMA_21, even though MACD is bullish
+            macd_sell=True
         )
         
-        self.assertEqual(signal, "BUY")   # Should generate BUY despite macd_sell (Rule 3 allows it)
+        self.assertEqual(signal, "HOLD")
         self.assertEqual(priority, 3)
+
+        decision = rebalancer._build_decision(
+            currency="ETH",
+            ta_score=6,
+            current_value_usdc=0.0,
+            percentage_change=0.0,
+            macd_sell=True
+        )
+        self.assertEqual(decision['ta_step'], "SELL")
+        self.assertEqual(decision['liquidity_step'], "BLOCK_SELL_BELOW_THRESHOLD")
+        self.assertEqual(decision['decision_step'], "HOLD")
 
     def test_hold_below_threshold_macd_sell_score_too_low(self):
         """Test no holdings + macd_sell=True + ta_score below BUY_THRESHOLD -> HOLD."""
@@ -294,6 +335,17 @@ class TestRebalancePortfolio(unittest.TestCase):
         
         self.assertEqual(signal, "SELL")  # Should force SELL (Rule 2 stop loss)
         self.assertEqual(priority, 2)  # Rule 2 has high priority
+
+        decision = rebalancer._build_decision(
+            currency="BTC",
+            ta_score=6,
+            current_value_usdc=150.0,
+            percentage_change=-7.0,
+            macd_sell=False
+        )
+        self.assertEqual(decision['risk_step'], "STOP_LOSS")
+        self.assertEqual(decision['risk_action'], "SELL")
+        self.assertEqual(decision['decision_step'], "SELL")
 
     def test_stop_loss_not_triggered_small_loss(self):
         """Test that stop loss does not trigger for small losses below threshold."""
@@ -468,16 +520,20 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Read and verify recommendations
         df = pd.read_csv(output_file)
         
-        # Should have 3 recommendations: 2 BUYs (BTC and ETH) and 1 SELL (SOL)
+        # Should have 3 decision rows: 2 BUYs (BTC and ETH) and 1 SELL (SOL)
         self.assertEqual(len(df), 3)
         
         # Verify all recommendations are present
         currencies = set(df['currency'].values)
         self.assertEqual(currencies, {'BTC', 'ETH', 'SOL'})
         
-        # Verify signals
-        buy_recs = df[df['signal'] == 'BUY']
-        sell_recs = df[df['signal'] == 'SELL']
+        # Verify separated decision columns
+        self.assertIn('ta_step', df.columns)
+        self.assertIn('risk_step', df.columns)
+        self.assertIn('liquidity_step', df.columns)
+        self.assertIn('decision_step', df.columns)
+        buy_recs = df[df['decision_step'] == 'BUY']
+        sell_recs = df[df['decision_step'] == 'SELL']
         self.assertEqual(len(buy_recs), 2)  # BTC and ETH
         self.assertEqual(len(sell_recs), 1)  # SOL
 
@@ -513,12 +569,13 @@ class TestRebalancePortfolio(unittest.TestCase):
         
         self.assertTrue(success)
         
-        # Verify empty output file with headers
+        # Verify output file includes HOLD decision rows with headers
         output_file = self.output_dir / "recommendations.csv"
         self.assertTrue(output_file.exists())
         
         df = pd.read_csv(output_file)
-        self.assertEqual(len(df), 0)  # No recommendations
+        self.assertEqual(len(df), 3)
+        self.assertTrue((df['decision_step'] == 'HOLD').all())
 
     def test_ta_calculated_even_without_holdings(self):
         """Test that TA is calculated for currencies without holdings to enable future BUY signals."""
@@ -567,15 +624,15 @@ class TestRebalancePortfolio(unittest.TestCase):
         # Read and verify recommendations
         df = pd.read_csv(output_file)
         
-        # Should have 2 BUY recommendations: both BTC (no holdings) and ETH (with holdings)
+        # Should have 2 BUY decisions: both BTC (no holdings) and ETH (with holdings)
         self.assertEqual(len(df), 2)
-        # Both should have BUY signals (graded ta_score >= BUY_THRESHOLD)
+        # Both should have BUY decisions (graded ta_score >= BUY_THRESHOLD)
         btc_rec = df[df['currency'] == 'BTC']
         eth_rec = df[df['currency'] == 'ETH']
         self.assertEqual(len(btc_rec), 1)
         self.assertEqual(len(eth_rec), 1)
-        self.assertEqual(btc_rec.iloc[0]['signal'], 'BUY')
-        self.assertEqual(eth_rec.iloc[0]['signal'], 'BUY')
+        self.assertEqual(btc_rec.iloc[0]['decision_step'], 'BUY')
+        self.assertEqual(eth_rec.iloc[0]['decision_step'], 'BUY')
 
 
 if __name__ == "__main__":
